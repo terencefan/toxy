@@ -1,7 +1,6 @@
 package xtransport
 
 import (
-	"fmt"
 	"net"
 )
 
@@ -18,7 +17,6 @@ func (self *TSocket) Read(message []byte) (int, error) {
 }
 
 func (self *TSocket) Write(message []byte) (int, error) {
-	fmt.Println(message)
 	return self.conn.Write(message)
 }
 

@@ -9,9 +9,10 @@ import (
 )
 
 type SingleProcessor struct {
-	name    string
-	handler *xhandler.Handler
-	pf      ProtocolFactory
+	name     string
+	handler  *xhandler.Handler
+	pf       ProtocolFactory
+	shutdown bool
 }
 
 func (self *SingleProcessor) Add(
@@ -48,7 +49,14 @@ func (self *SingleProcessor) Process(conn net.Conn) {
 		name, seqid := read_header(m)
 
 		if name == "ping" {
+			// reply_shutdown(m, name, seqid)
 			fast_reply(m, seqid)
+			continue
+		}
+
+		if self.shutdown {
+			reply_shutdown(m, name, seqid)
+			break
 		} else {
 			reply(m, name, seqid)
 		}
@@ -56,8 +64,14 @@ func (self *SingleProcessor) Process(conn net.Conn) {
 	}
 }
 
+func (self *SingleProcessor) Shutdown() (err error) {
+	self.shutdown = true
+	return
+}
+
 func NewProcessor(pf ProtocolFactory) *SingleProcessor {
 	return &SingleProcessor{
-		pf: pf,
+		pf:       pf,
+		shutdown: false,
 	}
 }

@@ -3,6 +3,10 @@ package main
 import (
 	"io"
 	"net"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"xhandler"
 	"xlog"
 	"xprocessor"
@@ -21,6 +25,8 @@ type Gateway struct {
 	socket_addr string
 	http_addr   string
 	processor   xprocessor.Processor
+	shutdown    bool
+	wg          *sync.WaitGroup
 }
 
 func (self *Gateway) process(conn net.Conn) {
@@ -36,6 +42,7 @@ func (self *Gateway) process(conn net.Conn) {
 			}
 		}
 		xlog.Info("[%s] connection closed", remote)
+		self.wg.Done()
 	}()
 
 	self.processor.Process(conn)
@@ -47,25 +54,39 @@ func (self *Gateway) Serve() {
 		panic(err)
 	}
 
-	l, err := net.ListenTCP("tcp", laddr)
+	ln, err := net.ListenTCP("tcp", laddr)
 	if err != nil {
 		panic(err)
 	}
+
 	xlog.Info("toxy is listening on %s", self.socket_addr)
 
-	// sigs := make(chan os.Signal, 1)
-	// signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-sigs
+		xlog.Warning("Received INT/TERM signal, stopping...")
+		self.shutdown = true
+		self.processor.Shutdown()
+		if ln != nil {
+			ln.Close()
+		}
+	}()
 
 	for {
-		conn, err := l.Accept()
+		conn, err := ln.Accept()
 		if err != nil {
+			if self.shutdown {
+				break
+			}
+			xlog.Warning(err.Error())
 			continue
 		}
+		self.wg.Add(1)
 		go self.process(conn)
 	}
-}
-
-func (self *Gateway) ServeHttp() {
+	self.wg.Wait()
 }
 
 func (self *Gateway) InitMetric(section *ini.Section) (err error) {
@@ -153,7 +174,10 @@ func (self *Gateway) LoadConfig(filepath string) (err error) {
 }
 
 func MakeGateway() *Gateway {
-	return &Gateway{}
+	return &Gateway{
+		shutdown: false,
+		wg:       new(sync.WaitGroup),
+	}
 }
 
 var (

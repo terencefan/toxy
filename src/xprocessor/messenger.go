@@ -1,6 +1,7 @@
 package xprocessor
 
 import (
+	. "xception"
 	"xlog"
 	. "xprotocol"
 	. "xthrift"
@@ -9,6 +10,10 @@ import (
 type Messenger struct {
 	iprot Protocol
 	oprot Protocol
+}
+
+type MessengerProtocolWriter interface {
+	Write(Protocol) error
 }
 
 func (m *Messenger) Reverse() {
@@ -67,7 +72,28 @@ func (m *Messenger) FastReply(seqid int32) (err error) {
 	return
 }
 
-func (m *Messenger) Reply(name string, seqid int32) {
+func (m *Messenger) Reply(name string, seqid int32) error {
+	return nil
+}
+
+func (m *Messenger) ReplyShutdown(name string, seqid int32) (err error) {
+	ae := NewTApplicationException("toxy is shutting down", ExceptionShutdown)
+	if err = m.iprot.Skip(T_STRUCT); err != nil {
+		return
+	}
+	if err = m.iprot.ReadMessageEnd(); err != nil {
+		return
+	}
+	if err = m.iprot.WriteMessageBegin(name, T_EXCEPTION, seqid); err != nil {
+		return
+	}
+	if err = ae.Write(m.iprot); err != nil {
+		return
+	}
+	if err = m.iprot.WriteMessageEnd(); err != nil {
+		return
+	}
+	return
 }
 
 // TODO This only happened while iprot and oprot are same.
@@ -95,4 +121,64 @@ func NewMessenger(protocol Protocol) *Messenger {
 	return &Messenger{
 		iprot: protocol,
 	}
+}
+
+func read_header(m *Messenger) (name string, seqid int32) {
+	xlog.Debug("read message header")
+	name, mtype, seqid, err := m.ReadMessageBegin()
+	if err != nil {
+		panic(err)
+	} else if mtype == T_ONEWAY {
+		// TODO reply exception "doesn't support oneway request yet."
+	} else if mtype != T_CALL {
+		// TODO raise exception.
+	} else {
+		return
+	}
+	return
+}
+
+func write_header(m *Messenger, name string, mtype byte, seqid int32) {
+	xlog.Debug("write message header")
+	if err := m.WriteMessageBegin(name, mtype, seqid); err != nil {
+		panic(err)
+	}
+}
+
+func forward_header(m *Messenger) {
+	xlog.Debug("forward message header")
+	if err := m.ForwardMessageBegin(); err != nil {
+		panic(err)
+	}
+}
+
+func forward_body(m *Messenger) {
+	xlog.Debug("forward message body")
+	if err := m.Forward(T_STRUCT); err != nil {
+		panic(err)
+	}
+	if err := m.ForwardMessageEnd(); err != nil {
+		panic(err)
+	}
+}
+
+func fast_reply(m *Messenger, seqid int32) {
+	if err := m.FastReply(seqid); err != nil {
+		panic(err)
+	}
+}
+
+func reply_shutdown(m *Messenger, name string, seqid int32) {
+	if err := m.ReplyShutdown(name, seqid); err != nil {
+		panic(err)
+	}
+}
+
+func reply(m *Messenger, name string, seqid int32) {
+	write_header(m, name, T_CALL, seqid)
+	forward_body(m)
+	m.Reverse()
+	forward_header(m)
+	forward_body(m)
+	m.Reverse()
 }

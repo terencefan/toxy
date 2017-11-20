@@ -6,7 +6,6 @@ import (
 	"xhandler"
 	"xlog"
 	. "xprotocol"
-	. "xthrift"
 	. "xtransport"
 )
 
@@ -70,12 +69,15 @@ func (self *MultiplexedProcessor) Process(conn net.Conn) {
 		// NOTE fast reply ping requests.
 		if name == "ping" {
 			fast_reply(m, seqid)
-		} else {
-			oprot := self.get_protocol(service)
-			m.SetOutputProtocol(oprot)
-			reply(m, fname, seqid)
-			m.DelOutputProtocol()
+			continue
 		}
+
+		oprot := self.get_protocol(service)
+		m.SetOutputProtocol(oprot)
+
+		reply(m, fname, seqid)
+
+		m.DelOutputProtocol()
 
 		// if self.shutdown {
 		// 	m.Reverse()
@@ -85,7 +87,10 @@ func (self *MultiplexedProcessor) Process(conn net.Conn) {
 		// 	return
 		// }
 	}
+}
 
+func (self *MultiplexedProcessor) Shutdown() (err error) {
+	return
 }
 
 func NewMultiplexedProcessor(pf ProtocolFactory) *MultiplexedProcessor {
@@ -94,58 +99,4 @@ func NewMultiplexedProcessor(pf ProtocolFactory) *MultiplexedProcessor {
 		hmap:     make(map[string]*xhandler.Handler),
 		shutdown: false,
 	}
-}
-
-func read_header(m *Messenger) (name string, seqid int32) {
-	xlog.Debug("read message header")
-	name, mtype, seqid, err := m.ReadMessageBegin()
-	if err != nil {
-		panic(err)
-	} else if mtype == T_ONEWAY {
-		// TODO reply exception "doesn't support oneway request yet."
-	} else if mtype != T_CALL {
-		// TODO raise exception.
-	} else {
-		return
-	}
-	return
-}
-
-func write_header(m *Messenger, name string, mtype byte, seqid int32) {
-	xlog.Debug("write message header")
-	if err := m.WriteMessageBegin(name, mtype, seqid); err != nil {
-		panic(err)
-	}
-}
-
-func forward_header(m *Messenger) {
-	xlog.Debug("forward message header")
-	if err := m.ForwardMessageBegin(); err != nil {
-		panic(err)
-	}
-}
-
-func forward_body(m *Messenger) {
-	xlog.Debug("forward message body")
-	if err := m.Forward(T_STRUCT); err != nil {
-		panic(err)
-	}
-	if err := m.ForwardMessageEnd(); err != nil {
-		panic(err)
-	}
-}
-
-func fast_reply(m *Messenger, seqid int32) {
-	if err := m.FastReply(seqid); err != nil {
-		panic(err)
-	}
-}
-
-func reply(m *Messenger, name string, seqid int32) {
-	write_header(m, name, T_CALL, seqid)
-	forward_body(m)
-	m.Reverse()
-	forward_header(m)
-	forward_body(m)
-	m.Reverse()
 }
