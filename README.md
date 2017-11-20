@@ -1,15 +1,22 @@
 # Toxy
 
-A microservice tool.
+**Still in progress**
 
-## Design Purpose
+A thrift microservice proxy.
 
-1. Simply transcode through protocols. (Binary <-> Compact)
-2. Metric api data (count, response-time).
-3. Work as a proxy, listening on a `port` and proxy rpc request to bankend server via `HTTP`, `Buffered` or `Framed`.
-4. Gracefully downgrade specified apis while backend server is down.
-5. Provide JSON http api at the same time.
-6. Work with multiple backend servers through `MultiplexedProcessor`
+It can proxy api to multiplex services through `multiplexed protocol`, and transform (`binary protocol`, `buffered socket transport`) to **any** combinations of `protocol`, `transport`, `transport wrapper`.
+
+## Other Design Purpose
+
+1. Gracefully shutdown. (by return a application exception)
+2. Metric api statistic data. (statsd protocol)
+3. Gracefully downgrade specified apis while backend service is down. (return empty value)
+4. Provide a socket pool to backend service which uses `socket transport`
+
+Nice to have:
+
+1. tracking.
+2. parallel.
 
 ## Config
 
@@ -23,32 +30,20 @@ addr=0.0.0.0:6000
 ;processor=default
 processor=multiplexed
 
-;[httpserver]
-;addr=0.0.0.0:8000
-
 [service.Revenue]
-thrift=/var/thrift/revenue.thrift
 transport=http
 addr=0.0.0.0:10010
 path=/Revenue
 
 [service.RevenueCoupon]
-thrift=/var/thrift/revenue-coupon.thrift
 transport=http
 addr=0.0.0.0:10010
 path=/RevenueCoupon
 
 [service.RevenueOrder]
-thrift=/var/thrift/revenue-order.thrift
 transport=http
 addr=0.0.0.0:10010
 path=/RevenueOrder
-
-;[service.Ping]
-;thrift=/var/thrift/ping.thrift
-;transport=http
-;addr=0.0.0.0:10010
-;path=/Ping
 
 [downgrade]
 apilist=/var/config/downgrade.apilist
