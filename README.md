@@ -1,6 +1,4 @@
-# Toxy
-
-**Still in progress**
+# Toxy (work in progress)
 
 A thrift microservice proxy.
 
