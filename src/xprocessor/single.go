@@ -24,11 +24,26 @@ func (self *SingleProcessor) Add(
 	return
 }
 
-func (self *SingleProcessor) Process(conn net.Conn) {
-	itrans := NewTSocketConn(conn)
-	protocol := self.pf.NewProtocol(itrans)
-	m := NewMessenger(protocol)
+func (self *SingleProcessor) handle(m *Messenger) bool {
+	name, seqid := read_header(m)
 
+	if name == "ping" {
+		// reply_shutdown(m, name, seqid)
+		fast_reply(m, seqid)
+		return true
+	}
+
+	if self.shutdown {
+		reply_shutdown(m, name, seqid)
+		return false
+	} else {
+		reply(m, name, seqid)
+		return true
+	}
+
+}
+
+func (self *SingleProcessor) get_protocol() Protocol {
 	// Get a server protocol
 	if self.handler == nil {
 		panic(errors.New("no handler has been set"))
@@ -37,30 +52,24 @@ func (self *SingleProcessor) Process(conn net.Conn) {
 	if err != nil {
 		panic(err)
 	}
-	oprot := NewTBinaryProtocol(otrans, true, true)
-	m.SetOutputProtocol(oprot)
+	return NewTBinaryProtocol(otrans, true, true)
+}
 
-	// close transports after process finished.
+func (self *SingleProcessor) Process(conn net.Conn) {
+	itrans := NewTSocketConn(conn)
 	defer itrans.Close()
+
+	protocol := self.pf.NewProtocol(itrans)
+	m := NewMessenger(protocol)
+
+	oprot := self.get_protocol()
+	m.SetOutputProtocol(oprot)
 	defer m.DelOutputProtocol()
 
 	for {
-		// TODO support oneway request.
-		name, seqid := read_header(m)
-
-		if name == "ping" {
-			// reply_shutdown(m, name, seqid)
-			fast_reply(m, seqid)
-			continue
-		}
-
-		if self.shutdown {
-			reply_shutdown(m, name, seqid)
+		if ok := self.handle(m); !ok {
 			break
-		} else {
-			reply(m, name, seqid)
 		}
-
 	}
 }
 

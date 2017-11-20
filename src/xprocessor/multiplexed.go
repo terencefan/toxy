@@ -35,9 +35,7 @@ func (self *MultiplexedProcessor) parse_name(name string) (
 	return
 }
 
-func (self *MultiplexedProcessor) get_protocol(service string) (
-	protocol Protocol,
-) {
+func (self *MultiplexedProcessor) get_protocol(service string) Protocol {
 	handler := self.hmap[service]
 	if handler == nil {
 		err := NewProcessorError("no handler has been set for: %s", service)
@@ -48,48 +46,50 @@ func (self *MultiplexedProcessor) get_protocol(service string) (
 	if err != nil {
 		panic(err)
 	}
-	protocol = NewTBinaryProtocol(otrans, true, true)
-	return
+	return NewTBinaryProtocol(otrans, true, true)
+}
+
+func (self *MultiplexedProcessor) handle(m *Messenger) bool {
+	name, seqid := read_header(m)
+
+	service, fname := self.parse_name(name)
+	xlog.Debug("%s: %s", service, fname)
+
+	// NOTE fast reply ping requests.
+	if fname == "ping" {
+		fast_reply(m, seqid)
+		return true
+	}
+
+	oprot := self.get_protocol(service)
+	m.SetOutputProtocol(oprot)
+	defer m.DelOutputProtocol()
+
+	if self.shutdown {
+		reply_shutdown(m, fname, seqid)
+		return false
+	} else {
+		reply(m, fname, seqid)
+		return true
+	}
 }
 
 func (self *MultiplexedProcessor) Process(conn net.Conn) {
 	itrans := NewTSocketConn(conn)
+	defer itrans.Close()
+
 	protocol := self.pf.NewProtocol(itrans)
 	m := NewMessenger(protocol)
 
-	defer itrans.Close()
-
 	for {
-		// TODO support oneway request.
-		name, seqid := read_header(m)
-
-		service, fname := self.parse_name(name)
-		xlog.Debug("%s: %s", service, fname)
-
-		// NOTE fast reply ping requests.
-		if name == "ping" {
-			fast_reply(m, seqid)
-			continue
+		if ok := self.handle(m); !ok {
+			break
 		}
-
-		oprot := self.get_protocol(service)
-		m.SetOutputProtocol(oprot)
-
-		reply(m, fname, seqid)
-
-		m.DelOutputProtocol()
-
-		// if self.shutdown {
-		// 	m.Reverse()
-		// 	err := errors.New("server is going away ~!")
-		// 	write_header(m, fname, T_EXCEPTION, seqid)
-		// 	write_body_error(m, err)
-		// 	return
-		// }
 	}
 }
 
 func (self *MultiplexedProcessor) Shutdown() (err error) {
+	self.shutdown = true
 	return
 }
 
