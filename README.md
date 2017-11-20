@@ -2,7 +2,7 @@
 
 A thrift microservice proxy.
 
-It can receive thrift api from multiple clients through `multiplexed protocol`, and transform (`binary protocol`, `buffered socket transport`) to **any** combinations of `protocol`, `transport`, `transport wrapper`.
+It can receive thrift api from multiple clients through `multiplexed protocol`, and transform `(binary protocol, buffered socket transport)` to **any** combinations of `(protocol, transport, transport wrapper)`.
 
 ## Other Design Purpose
 
