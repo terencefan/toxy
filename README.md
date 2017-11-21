@@ -16,7 +16,7 @@ It can receive thrift api from multiple clients through `multiplexed protocol`, 
 ### Transports
 
 * socket
-* http
+* http (over tcp)
 * memory
 
 ### Transport Wrappers
@@ -36,10 +36,12 @@ It can receive thrift api from multiple clients through `multiplexed protocol`, 
 
 * tls socket
 * unix socket
+* https (over tls)
 
 ### Transport Wrappers
 
 * framed
+* http
 
 ## Config
 
