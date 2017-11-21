@@ -11,11 +11,6 @@ It can receive thrift api from multiple clients through `multiplexed protocol`, 
 3. Gracefully downgrade specified apis while backend service is down. (return empty value)
 4. Provide a socket pool to backend service which uses `socket transport`
 
-Nice to have:
-
-1. tracking.
-2. parallel.
-
 ## Config
 
 ```ini

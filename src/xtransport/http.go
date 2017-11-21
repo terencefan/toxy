@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"time"
+	. "xception"
 )
 
 type THttpTransport struct {
@@ -15,11 +18,6 @@ type THttpTransport struct {
 
 type THttpTransportFactory struct {
 	addr string
-	path string
-}
-
-// TODO write a real http wrapper
-type THttpTransportWrapper struct {
 	path string
 }
 
@@ -38,8 +36,14 @@ func (self *THttpTransport) Close() error {
 func (self *THttpTransport) Flush() (err error) {
 	uri := fmt.Sprintf("http://%s%s", self.addr, self.path)
 
-	resp, err := http.Post(uri, "application/thrift", self.buf)
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+	resp, err := client.Post(uri, "application/thrift", self.buf)
 
+	if ne, ok := err.(net.Error); ok && ne.Timeout() {
+		err = NewTApplicationException("toxy timeout exceeded", 0)
+	}
 	if err != nil {
 		return
 	}

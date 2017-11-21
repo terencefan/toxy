@@ -2,8 +2,11 @@ package xprocessor
 
 import (
 	"errors"
+	"fmt"
 	"net"
+	"time"
 	"xhandler"
+	"xmetric"
 	. "xprotocol"
 	. "xtransport"
 )
@@ -25,7 +28,15 @@ func (self *SingleProcessor) Add(
 }
 
 func (self *SingleProcessor) handle(m *Messenger) bool {
+	s_time := time.Now().UnixNano()
+
 	name, seqid := read_header(m)
+
+	key := fmt.Sprintf("%s.%s", self.name, name)
+	defer func() {
+		delta := int((time.Now().UnixNano() - s_time) / 1000000)
+		xmetric.Timing("toxy", key, delta)
+	}()
 
 	if name == "ping" {
 		// reply_shutdown(m, name, seqid)
@@ -34,7 +45,7 @@ func (self *SingleProcessor) handle(m *Messenger) bool {
 	}
 
 	if self.shutdown {
-		reply_shutdown(m, name, seqid)
+		fast_reply_shutdown(m, name, seqid)
 		return false
 	} else {
 		reply(m, name, seqid)

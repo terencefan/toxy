@@ -1,10 +1,13 @@
 package xprocessor
 
 import (
+	"fmt"
 	"net"
 	"strings"
+	"time"
 	"xhandler"
 	"xlog"
+	"xmetric"
 	. "xprotocol"
 	. "xtransport"
 )
@@ -50,10 +53,19 @@ func (self *MultiplexedProcessor) get_protocol(service string) Protocol {
 }
 
 func (self *MultiplexedProcessor) handle(m *Messenger) bool {
+	s_time := time.Now().UnixNano()
+
 	name, seqid := read_header(m)
 
 	service, fname := self.parse_name(name)
 	xlog.Debug("%s: %s", service, fname)
+
+	key := fmt.Sprintf("%s.%s", service, fname)
+	defer func() {
+		delta := int((time.Now().UnixNano() - s_time) / 1000000)
+		xmetric.Timing("toxy", key, delta)
+	}()
+	xmetric.Count("toxy", key, 1)
 
 	// NOTE fast reply ping requests.
 	if fname == "ping" {
@@ -66,7 +78,7 @@ func (self *MultiplexedProcessor) handle(m *Messenger) bool {
 	defer m.DelOutputProtocol()
 
 	if self.shutdown {
-		reply_shutdown(m, fname, seqid)
+		fast_reply_shutdown(m, fname, seqid)
 		return false
 	} else {
 		reply(m, fname, seqid)
