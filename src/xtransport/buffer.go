@@ -1,6 +1,8 @@
 package xtransport
 
-import "bufio"
+import (
+	"bufio"
+)
 
 const (
 	DEFAULT_BUF_SIZE = 4096

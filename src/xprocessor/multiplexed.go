@@ -87,7 +87,9 @@ func (self *MultiplexedProcessor) handle(m *Messenger) bool {
 }
 
 func (self *MultiplexedProcessor) Process(conn net.Conn) {
-	itrans := NewTSocketConn(conn)
+	var itrans Transport
+	itrans = NewTSocketConn(conn)
+	itrans = NewTBufferedTransport(itrans)
 	defer itrans.Close()
 
 	protocol := self.pf.NewProtocol(itrans)

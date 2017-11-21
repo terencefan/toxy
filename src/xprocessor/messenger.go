@@ -69,19 +69,6 @@ func (m *Messenger) skipIncomingMessage() (err error) {
 	return
 }
 
-func (m *Messenger) writeApplicationException(name string, seqid int32, ae *TApplicationException) (err error) {
-	if err = m.iprot.WriteMessageBegin(name, T_EXCEPTION, seqid); err != nil {
-		return
-	}
-	if err = write_application_exception(ae, m.iprot); err != nil {
-		return
-	}
-	if err = m.iprot.WriteMessageEnd(); err != nil {
-		return
-	}
-	return
-}
-
 func (m *Messenger) FastReply(seqid int32) (err error) {
 	xlog.Debug("fast reply: ping")
 	if err = m.skipIncomingMessage(); err != nil {
@@ -96,6 +83,9 @@ func (m *Messenger) FastReply(seqid int32) (err error) {
 	if err = m.iprot.WriteMessageEnd(); err != nil {
 		return
 	}
+	if err := m.iprot.Flush(); err != nil {
+		return err
+	}
 	return
 }
 
@@ -104,8 +94,17 @@ func (m *Messenger) FastReplyShutdown(name string, seqid int32) (err error) {
 	if err = m.skipIncomingMessage(); err != nil {
 		return
 	}
-	if err = m.writeApplicationException(name, seqid, ae); err != nil {
+	if err = m.iprot.WriteMessageBegin(name, T_EXCEPTION, seqid); err != nil {
 		return
+	}
+	if err = write_application_exception(ae, m.iprot); err != nil {
+		return
+	}
+	if err = m.iprot.WriteMessageEnd(); err != nil {
+		return
+	}
+	if err := m.iprot.Flush(); err != nil {
+		return err
 	}
 	return
 }
