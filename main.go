@@ -181,13 +181,13 @@ func MakeGateway() *Gateway {
 }
 
 var (
-	config = kingpin.Flag("config", "Config file.").Short('c').Required().String()
+	config = kingpin.Flag("config", "Config file.").Short('c').Default("toxy.ini").String()
 )
 
 func main() {
-	// kingpin.Parse()
+	kingpin.Parse()
 	var gateway = MakeGateway()
-	if err := gateway.LoadConfig("toxy.ini"); err != nil {
+	if err := gateway.LoadConfig(*config); err != nil {
 		panic(err)
 	}
 	gateway.Serve()
