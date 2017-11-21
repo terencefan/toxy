@@ -4,12 +4,42 @@ A thrift microservice proxy.
 
 It can receive thrift api from multiple clients through `multiplexed protocol`, and transform `(binary protocol, buffered socket transport)` to **any** combinations of `(protocol, transport, transport wrapper)`.
 
-## Other Design Purpose
+## Current achieved goals
 
 1. Gracefully shutdown. (by return a application exception)
-2. Metric api statistic data. (statsd protocol)
-3. Gracefully downgrade specified apis while backend service is down. (return empty value)
-4. Provide a socket pool to backend service which uses `socket transport`
+2. Metric api statistic data. (buffered statsd)
+
+### Protocols
+
+* binary protocol
+
+### Transports
+
+* socket
+* http
+* memory
+
+### Transport Wrappers
+
+* buffered
+
+## Todo list
+
+1. Gracefully downgrade specified apis while backend service is down. (return empty value)
+2. Provide a socket pool to backend service which uses `socket transport`
+
+### Protocols
+
+* compact protocol
+
+### Transports
+
+* tls socket
+* unix socket
+
+### Transport Wrappers
+
+* framed
 
 ## Config
 
