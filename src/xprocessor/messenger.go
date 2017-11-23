@@ -16,44 +16,45 @@ type MessengerProtocolWriter interface {
 	Write(Protocol) error
 }
 
-func (m *Messenger) Reverse() {
-	m.iprot, m.oprot = m.oprot, m.iprot
+func (m *Messenger) ForwardMessage(iprot, oprot Protocol) (err error) {
+	if err = m.ForwardMessageBegin(iprot, oprot); err != nil {
+		return
+	}
+	if err = m.Forward(iprot, oprot, T_STRUCT); err != nil {
+		return
+	}
+	if err = m.ForwardMessageEnd(iprot, oprot); err != nil {
+		return
+	}
+	return
 }
 
-func (m *Messenger) ReadMessageBegin() (name string, mtype byte, seqid int32, err error) {
-	return m.iprot.ReadMessageBegin()
-}
-
-func (m *Messenger) WriteMessageBegin(name string, mtype byte, seqid int32) error {
-	return m.oprot.WriteMessageBegin(name, mtype, seqid)
-}
-
-func (m *Messenger) Forward(ftype byte) error {
-	if err := forward(m.iprot, m.oprot, ftype); err != nil {
+func (m *Messenger) Forward(iprot, oprot Protocol, ftype byte) error {
+	if err := forward(iprot, oprot, ftype); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (m *Messenger) ForwardMessageBegin() error {
-	name, mtype, seqid, err := m.iprot.ReadMessageBegin()
+func (m *Messenger) ForwardMessageBegin(iprot, oprot Protocol) error {
+	name, mtype, seqid, err := iprot.ReadMessageBegin()
 	if err != nil {
 		return err
 	}
-	if err := m.oprot.WriteMessageBegin(name, mtype, seqid); err != nil {
+	if err := oprot.WriteMessageBegin(name, mtype, seqid); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (m *Messenger) ForwardMessageEnd() error {
-	if err := m.iprot.ReadMessageEnd(); err != nil {
+func (m *Messenger) ForwardMessageEnd(iprot, oprot Protocol) error {
+	if err := iprot.ReadMessageEnd(); err != nil {
 		return err
 	}
-	if err := m.oprot.WriteMessageEnd(); err != nil {
+	if err := oprot.WriteMessageEnd(); err != nil {
 		return err
 	}
-	if err := m.oprot.Flush(); err != nil {
+	if err := oprot.Flush(); err != nil {
 		return err
 	}
 	return nil
@@ -90,6 +91,7 @@ func (m *Messenger) FastReply(seqid int32) (err error) {
 }
 
 func (m *Messenger) FastReplyShutdown(name string, seqid int32) (err error) {
+
 	ae := NewTApplicationException("toxy is shutting down", ExceptionUnknown)
 	if err = m.skipIncomingMessage(); err != nil {
 		return
@@ -157,7 +159,7 @@ func write_application_exception(e *TApplicationException, proto Protocol) (err 
 
 func read_header(m *Messenger) (name string, seqid int32) {
 	xlog.Debug("read message header")
-	name, mtype, seqid, err := m.ReadMessageBegin()
+	name, mtype, seqid, err := m.iprot.ReadMessageBegin()
 	if err != nil {
 		panic(err)
 	} else if mtype == T_ONEWAY {
@@ -185,26 +187,12 @@ func fast_reply_shutdown(m *Messenger, name string, seqid int32) bool {
 }
 
 func reply(m *Messenger, name string, seqid int32) bool {
-	if err := m.WriteMessageBegin(name, T_CALL, seqid); err != nil {
+	iprot := NewStoredProtocol(m.iprot, name, T_CALL, seqid)
+	if err := m.ForwardMessage(iprot, m.oprot); err != nil {
 		panic(err)
 	}
-	if err := m.Forward(T_STRUCT); err != nil {
+	if err := m.ForwardMessage(m.oprot, m.iprot); err != nil {
 		panic(err)
 	}
-	if err := m.ForwardMessageEnd(); err != nil {
-		panic(err)
-	}
-	m.Reverse()
-
-	if err := m.ForwardMessageBegin(); err != nil {
-		panic(err)
-	}
-	if err := m.Forward(T_STRUCT); err != nil {
-		panic(err)
-	}
-	if err := m.ForwardMessageEnd(); err != nil {
-		panic(err)
-	}
-	m.Reverse()
 	return true
 }
