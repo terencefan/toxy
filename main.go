@@ -97,7 +97,7 @@ func (self *Gateway) InitServices(sections []*ini.Section) (err error) {
 	for _, section := range sections {
 		name := section.Name()[8:]
 
-		handler, err := xhandler.NewHandler(section)
+		handler, err := xhandler.NewHandler(name, section)
 		if err != nil {
 			return err
 		}

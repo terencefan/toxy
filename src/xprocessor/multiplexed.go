@@ -45,11 +45,11 @@ func (self *MultiplexedProcessor) get_protocol(service string) Protocol {
 		panic(err)
 	}
 
-	otrans, err := handler.GetTransport()
+	proto, err := handler.GetProtocol()
 	if err != nil {
 		panic(err)
 	}
-	return NewTBinaryProtocol(otrans, true, true)
+	return proto
 }
 
 func (self *MultiplexedProcessor) handle(m *Messenger) bool {

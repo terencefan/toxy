@@ -59,11 +59,11 @@ func (self *SingleProcessor) get_protocol() Protocol {
 	if self.handler == nil {
 		panic(errors.New("no handler has been set"))
 	}
-	otrans, err := self.handler.GetTransport()
+	proto, err := self.handler.GetProtocol()
 	if err != nil {
 		panic(err)
 	}
-	return NewTBinaryProtocol(otrans, true, true)
+	return proto
 }
 
 func (self *SingleProcessor) Process(conn net.Conn) {

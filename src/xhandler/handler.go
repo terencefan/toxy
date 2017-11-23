@@ -2,6 +2,7 @@ package xhandler
 
 import (
 	"errors"
+	. "xprotocol"
 	"xthrift"
 	. "xtransport"
 
@@ -10,8 +11,10 @@ import (
 )
 
 type Handler struct {
-	tf TransportFactory
-	tw TransportWrapper
+	name        string
+	tf          TransportFactory
+	tw          TransportWrapper
+	multiplexed bool
 }
 
 var p = &parser.Parser{}
@@ -25,6 +28,8 @@ func new_http_tf(section *ini.Section) (tf TransportFactory, err error) {
 }
 
 func new_socket_tf(section *ini.Section) (tf TransportFactory, err error) {
+	addr := section.Key("addr").String()
+	tf = NewTSocketFactory(addr)
 	return
 }
 
@@ -36,13 +41,16 @@ func new_buffered_tw(section *ini.Section) (tw TransportWrapper, err error) {
 }
 
 func new_framed_tw(section *ini.Section) (tw TransportWrapper, err error) {
-	err = errors.New("framed transport wrapper has not been supported yet")
+	rframed, wframed := false, true
+	tw = NewTFramedTransportFactory(rframed, wframed)
 	return
 }
 
-func NewHandler(section *ini.Section) (h *Handler, err error) {
+func NewHandler(name string, section *ini.Section) (h *Handler, err error) {
 	h = &Handler{
-		tw: TTransportWrapper,
+		name:        name,
+		tw:          TTransportWrapper,
+		multiplexed: false,
 	}
 
 	// transport
@@ -95,15 +103,32 @@ func NewHandler(section *ini.Section) (h *Handler, err error) {
 			return nil, err
 		}
 	}
+
+	// multiplexed
+	if section.HasKey("multiplexed") {
+		h.multiplexed = true
+	}
 	return
 }
 
-func (self *Handler) GetTransport() (trans Transport, err error) {
-	if trans, err = self.tf.GetTransport(); err != nil {
+func (h *Handler) GetTransport() (trans Transport, err error) {
+	if trans, err = h.tf.GetTransport(); err != nil {
 		return
 	}
-	if trans, err = self.tw.Wraps(trans); err != nil {
+	if trans, err = h.tw.Wraps(trans); err != nil {
 		return
+	}
+	return
+}
+
+func (h *Handler) GetProtocol() (proto Protocol, err error) {
+	var trans Transport
+	if trans, err = h.GetTransport(); err != nil {
+		return
+	}
+	proto = NewTBinaryProtocol(trans, true, true)
+	if h.multiplexed {
+		proto = NewTMultiplexedProtocol(proto, h.name)
 	}
 	return
 }
