@@ -1,4 +1,4 @@
-package xception
+package xthrift
 
 import (
 	"fmt"

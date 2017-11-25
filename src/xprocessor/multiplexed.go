@@ -53,6 +53,11 @@ func (self *MultiplexedProcessor) get_protocol(service string) Protocol {
 }
 
 func (self *MultiplexedProcessor) handle(m *Messenger) bool {
+	if self.shutdown {
+		fast_reply_shutdown(m)
+		return false
+	}
+
 	s_time := time.Now().UnixNano()
 
 	name, seqid := read_header(m)
@@ -77,13 +82,8 @@ func (self *MultiplexedProcessor) handle(m *Messenger) bool {
 	m.SetOutputProtocol(oprot)
 	defer m.DelOutputProtocol()
 
-	if self.shutdown {
-		fast_reply_shutdown(m, fname, seqid)
-		return false
-	} else {
-		reply(m, fname, seqid)
-		return true
-	}
+	reply(m, fname, seqid)
+	return true
 }
 
 func (self *MultiplexedProcessor) Process(conn net.Conn) {

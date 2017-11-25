@@ -7,7 +7,7 @@ import (
 	"net"
 	"net/http"
 	"time"
-	. "xception"
+	. "xthrift"
 )
 
 type THttpTransport struct {

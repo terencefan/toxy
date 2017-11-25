@@ -28,6 +28,11 @@ func (self *SingleProcessor) Add(
 }
 
 func (self *SingleProcessor) handle(m *Messenger) bool {
+	if self.shutdown {
+		fast_reply_shutdown(m)
+		return false
+	}
+
 	s_time := time.Now().UnixNano()
 
 	name, seqid := read_header(m)
@@ -44,14 +49,8 @@ func (self *SingleProcessor) handle(m *Messenger) bool {
 		return true
 	}
 
-	if self.shutdown {
-		fast_reply_shutdown(m, name, seqid)
-		return false
-	} else {
-		reply(m, name, seqid)
-		return true
-	}
-
+	reply(m, name, seqid)
+	return true
 }
 
 func (self *SingleProcessor) get_protocol() Protocol {

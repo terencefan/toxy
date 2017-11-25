@@ -1,7 +1,6 @@
 package xprocessor
 
 import (
-	. "xception"
 	"xlog"
 	. "xprotocol"
 	. "xthrift"
@@ -90,13 +89,10 @@ func (m *Messenger) FastReply(seqid int32) (err error) {
 	return
 }
 
-func (m *Messenger) FastReplyShutdown(name string, seqid int32) (err error) {
+func (m *Messenger) FastReplyShutdown() (err error) {
 
 	ae := NewTApplicationException("toxy is shutting down", ExceptionUnknown)
-	if err = m.skipIncomingMessage(); err != nil {
-		return
-	}
-	if err = m.iprot.WriteMessageBegin(name, T_EXCEPTION, seqid); err != nil {
+	if err = m.iprot.WriteMessageBegin("unknown", T_EXCEPTION, 0); err != nil {
 		return
 	}
 	if err = write_application_exception(ae, m.iprot); err != nil {
@@ -179,8 +175,8 @@ func fast_reply(m *Messenger, seqid int32) bool {
 	return true
 }
 
-func fast_reply_shutdown(m *Messenger, name string, seqid int32) bool {
-	if err := m.FastReplyShutdown(name, seqid); err != nil {
+func fast_reply_shutdown(m *Messenger) bool {
+	if err := m.FastReplyShutdown(); err != nil {
 		panic(err)
 	}
 	return false
