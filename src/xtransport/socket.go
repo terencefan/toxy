@@ -4,12 +4,19 @@ import (
 	"net"
 )
 
+const (
+	sockTypeTcp  = "tcp"
+	sockTypeUnix = "unix"
+)
+
 type TSocket struct {
-	conn net.Conn
+	conn     net.Conn
+	sockType string
 }
 
 type TSocketFactory struct {
-	addr string
+	addr     string
+	sockType string
 }
 
 func (self *TSocket) Read(message []byte) (int, error) {
@@ -33,7 +40,18 @@ func (self *TSocketFactory) GetTransport() (Transport, error) {
 }
 
 func NewTSocket(addr string) (trans *TSocket, err error) {
-	conn, err := net.Dial("tcp", addr)
+	conn, err := net.Dial(sockTypeTcp, addr)
+	if err != nil {
+		return
+	}
+	trans = &TSocket{
+		conn: conn,
+	}
+	return
+}
+
+func NewTUnixSocket(addr string) (trans *TSocket, err error) {
+	conn, err := net.Dial(sockTypeUnix, addr)
 	if err != nil {
 		return
 	}
@@ -51,6 +69,14 @@ func NewTSocketConn(conn net.Conn) *TSocket {
 
 func NewTSocketFactory(addr string) *TSocketFactory {
 	return &TSocketFactory{
-		addr: addr,
+		addr:     addr,
+		sockType: sockTypeTcp,
+	}
+}
+
+func NewTUnixSocketFactory(addr string) *TSocketFactory {
+	return &TSocketFactory{
+		addr:     addr,
+		sockType: sockTypeUnix,
 	}
 }
