@@ -36,20 +36,12 @@ It can receive thrift api from multiple clients through `multiplexed protocol`, 
 ### Protocols
 
 * compact protocol
+* json protocol
 
 ### Transports
 
 * tls socket
-* unix socket
 * https (over tls)
-
-### Transport Wrappers
-
-* http
-
-### Server
-
-* goroutine server.
 
 ## Config
 

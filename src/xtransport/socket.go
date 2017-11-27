@@ -1,6 +1,7 @@
 package xtransport
 
 import (
+	"errors"
 	"net"
 )
 
@@ -36,7 +37,14 @@ func (self *TSocket) Flush() error {
 }
 
 func (self *TSocketFactory) GetTransport() (Transport, error) {
-	return NewTSocket(self.addr)
+	switch self.sockType {
+	case sockTypeTcp:
+		return NewTSocket(self.addr)
+	case sockTypeUnix:
+		return NewTUnixSocket(self.addr)
+	default:
+		return nil, errors.New("invalid socket type")
+	}
 }
 
 func NewTSocket(addr string) (trans *TSocket, err error) {
