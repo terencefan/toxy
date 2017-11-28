@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 	"xlog"
 	"xmetric"
 
@@ -47,6 +48,8 @@ func (self *Toxy) process(conn net.Conn) {
 }
 
 func (self *Toxy) Serve() {
+	xmetric.Count("toxy", "restart", 1)
+
 	laddr, err := net.ResolveTCPAddr("tcp", self.socket_addr)
 	if err != nil {
 		panic(err)
@@ -86,6 +89,23 @@ func (self *Toxy) Serve() {
 }
 
 func (self *Toxy) InitMetric(section *ini.Section) (err error) {
+	var addr = "0.0.0.0:8125"
+	if section.HasKey("addr") {
+		addr = section.Key("addr").String()
+	}
+
+	var prefix = ""
+	if section.HasKey("prefix") {
+		prefix = section.Key("prefix").String()
+	}
+
+	xmetric.InitBufferedStatsd(
+		xmetric.Address(addr),
+		xmetric.Prefix(prefix),
+		xmetric.FlushPeriod(time.Second),
+		xmetric.MaxBufferSize(1450),
+		xmetric.MaxQueueSize(128),
+	)
 	return
 }
 

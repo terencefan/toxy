@@ -31,7 +31,13 @@ func NewConfig(options ...Option) (c *config) {
 	return
 }
 
-func Address(host string, port int) Option {
+func Address(addr string) Option {
+	return Option(func(c *config) {
+		c.Addr = addr
+	})
+}
+
+func AddressHostPort(host string, port int) Option {
 	return Option(func(c *config) {
 		c.Addr = fmt.Sprintf("%s:%d", host, port)
 	})

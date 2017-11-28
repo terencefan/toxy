@@ -133,6 +133,9 @@ func (h *Handler) GetProtocol() (proto Protocol, err error) {
 	if trans, err = h.GetTransport(); err != nil {
 		return
 	}
+	if err = trans.Open(); err != nil {
+		return
+	}
 	proto = NewTBinaryProtocol(trans, true, true)
 	if h.multiplexed {
 		proto = NewTMultiplexedProtocol(proto, h.name)
