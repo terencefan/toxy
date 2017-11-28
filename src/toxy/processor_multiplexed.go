@@ -13,9 +13,8 @@ import (
 )
 
 type MultiplexedProcessor struct {
-	pf       ProtocolFactory
-	hmap     map[string]*Handler
-	shutdown bool
+	pf   ProtocolFactory
+	hmap map[string]*Handler
 }
 
 func (self *MultiplexedProcessor) Add(
@@ -53,7 +52,7 @@ func (self *MultiplexedProcessor) get_protocol(service string) Protocol {
 }
 
 func (self *MultiplexedProcessor) handle(m *Messenger) bool {
-	if self.shutdown {
+	if shutdown > 0 {
 		fast_reply_shutdown(m)
 		return false
 	}
@@ -73,6 +72,7 @@ func (self *MultiplexedProcessor) handle(m *Messenger) bool {
 	xmetric.Count("toxy", key, 1)
 
 	// NOTE fast reply ping requests.
+	// is it neccessary?
 	if fname == "ping" {
 		fast_reply(m, seqid)
 		return true
@@ -102,15 +102,9 @@ func (self *MultiplexedProcessor) Process(conn net.Conn) {
 	}
 }
 
-func (self *MultiplexedProcessor) Shutdown() (err error) {
-	self.shutdown = true
-	return
-}
-
 func NewMultiplexedProcessor(pf ProtocolFactory) *MultiplexedProcessor {
 	return &MultiplexedProcessor{
-		pf:       pf,
-		hmap:     make(map[string]*Handler),
-		shutdown: false,
+		pf:   pf,
+		hmap: make(map[string]*Handler),
 	}
 }

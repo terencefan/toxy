@@ -12,10 +12,9 @@ import (
 )
 
 type SingleProcessor struct {
-	name     string
-	handler  *Handler
-	pf       ProtocolFactory
-	shutdown bool
+	name    string
+	handler *Handler
+	pf      ProtocolFactory
 }
 
 func (self *SingleProcessor) Add(
@@ -28,7 +27,7 @@ func (self *SingleProcessor) Add(
 }
 
 func (self *SingleProcessor) handle(m *Messenger) bool {
-	if self.shutdown {
+	if shutdown > 0 {
 		fast_reply_shutdown(m)
 		return false
 	}
@@ -83,14 +82,8 @@ func (self *SingleProcessor) Process(conn net.Conn) {
 	}
 }
 
-func (self *SingleProcessor) Shutdown() (err error) {
-	self.shutdown = true
-	return
-}
-
 func NewProcessor(pf ProtocolFactory) *SingleProcessor {
 	return &SingleProcessor{
-		pf:       pf,
-		shutdown: false,
+		pf: pf,
 	}
 }

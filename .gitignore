@@ -17,4 +17,11 @@ pkg/
 
 .envrc
 
-main
+/main
+/toxy
+/tenchmark/main
+/tenchmark/tenchmark
+/ting/main
+/ting/ting
+
+/bin/

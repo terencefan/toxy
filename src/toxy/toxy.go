@@ -6,37 +6,43 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"xlog"
+	"xmetric"
 
 	. "github.com/stdrickforce/thriftgo/protocol"
 	ini "gopkg.in/ini.v1"
 )
 
+var shutdown int32 = 0
+
 type Toxy struct {
 	socket_addr string
 	http_addr   string
 	processor   Processor
-	shutdown    bool
 	wg          *sync.WaitGroup
 }
 
 func (self *Toxy) process(conn net.Conn) {
+	self.wg.Add(1)
 	remote := conn.RemoteAddr().String()
 	xlog.Info("[%s] receive connection", remote)
+	xmetric.Count("toxy", "connection.established", 1)
 
 	defer func() {
 		if err := recover(); err != nil {
 			if err != io.EOF {
-				xlog.Info("[%s] unexpected err found: %s", remote, err)
+				xmetric.Count("toxy", "error.unexpected", 1)
+				xlog.Warning("[%s] unexpected err found: %s", remote, err)
 			} else {
+				xmetric.Count("toxy", "connection.closed", 1)
 				xlog.Debug("[%s] connection reset by peer", remote)
 			}
 		}
 		xlog.Info("[%s] connection closed", remote)
 		self.wg.Done()
 	}()
-
 	self.processor.Process(conn)
 }
 
@@ -59,8 +65,7 @@ func (self *Toxy) Serve() {
 	go func() {
 		<-sigs
 		xlog.Warning("Received INT/TERM signal, stopping...")
-		self.shutdown = true
-		self.processor.Shutdown()
+		atomic.StoreInt32(&shutdown, 1)
 		if ln != nil {
 			ln.Close()
 		}
@@ -69,13 +74,12 @@ func (self *Toxy) Serve() {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			if self.shutdown {
+			xlog.Warning(err.Error())
+			if shutdown > 0 {
 				break
 			}
-			xlog.Warning(err.Error())
 			continue
 		}
-		self.wg.Add(1)
 		go self.process(conn)
 	}
 	self.wg.Wait()
@@ -154,9 +158,9 @@ func (self *Toxy) LoadConfig(filepath string) (err error) {
 		return
 	}
 
-	// TODO httpserver.
+	// TODO init httpserver.
 
-	// TODO downgrade.
+	// TODO init downgrade.
 
 	// initialize backend services.
 	if err = self.InitServices(f.ChildSections("service")); err != nil {
@@ -167,7 +171,6 @@ func (self *Toxy) LoadConfig(filepath string) (err error) {
 
 func NewToxy() *Toxy {
 	return &Toxy{
-		shutdown: false,
-		wg:       new(sync.WaitGroup),
+		wg: new(sync.WaitGroup),
 	}
 }

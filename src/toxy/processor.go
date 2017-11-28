@@ -8,7 +8,6 @@ import (
 type Processor interface {
 	Add(string, *Handler) error
 	Process(net.Conn)
-	Shutdown() error
 }
 
 type ProcessorError struct {
