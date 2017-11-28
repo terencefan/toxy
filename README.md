@@ -2,8 +2,6 @@
 
 A thrift microservice proxy.
 
-**It's also a easy-to-use thrift library written in go**
-
 [documentation]()
 
 It can receive thrift api from multiple clients through `multiplexed protocol`, and transform `(binary protocol, buffered socket transport)` to **any** combinations of `(protocol, transport, transport wrapper)`.
