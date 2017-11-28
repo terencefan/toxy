@@ -92,7 +92,7 @@ func (self *MultiplexedProcessor) Process(conn net.Conn) {
 	itrans = NewTBufferedTransport(itrans)
 	defer itrans.Close()
 
-	protocol := self.pf.NewProtocol(itrans)
+	protocol := self.pf.GetProtocol(itrans)
 	m := NewMessenger(protocol)
 
 	for {

@@ -7,13 +7,17 @@ import (
 	. "github.com/stdrickforce/thriftgo/protocol"
 )
 
+type TestFunc func(proto Protocol) error
+
 var wg sync.WaitGroup
 
-func call(proto Protocol, name string, args ...interface{}) error {
-	return nil
+func call(name string, args ...interface{}) TestFunc {
+	return func(proto Protocol) error {
+		return nil
+	}
 }
 
-func processor(id int, fn func(proto Protocol) error) {
+func processor(id int, fn TestFunc) {
 	defer wg.Done()
 
 	// TODO build a real protocol
@@ -27,10 +31,7 @@ func processor(id int, fn func(proto Protocol) error) {
 
 func main() {
 	for i := 0; i < 10; i++ {
-		fn := func(proto Protocol) error {
-			return call(proto, "ping")
-		}
-		go processor(i, fn)
+		go processor(i, call("ping"))
 		wg.Add(1)
 	}
 	wg.Wait()

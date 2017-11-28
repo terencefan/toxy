@@ -69,7 +69,7 @@ func (self *SingleProcessor) Process(conn net.Conn) {
 	itrans := NewTSocketConn(conn)
 	defer itrans.Close()
 
-	protocol := self.pf.NewProtocol(itrans)
+	protocol := self.pf.GetProtocol(itrans)
 	m := NewMessenger(protocol)
 
 	oprot := self.get_protocol()

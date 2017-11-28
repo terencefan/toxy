@@ -96,19 +96,15 @@ func main() {
 	var (
 		trans transport.Transport
 		proto protocol.Protocol
-		err   error
 	)
 
-	trans, err = tf.GetTransport()
-	if err != nil {
-		panic(err)
-	}
+	trans = tf.GetTransport()
+	trans = tw.GetTransport(trans)
+	proto = pf.GetProtocol(trans)
 
-	trans, err = tw.Wraps(trans)
-	if err != nil {
+	if err := trans.Open(); err != nil {
 		panic(err)
 	}
-	proto = pf.NewProtocol(trans)
 
 	mtype := ping(proto)
 

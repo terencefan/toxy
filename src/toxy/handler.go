@@ -123,12 +123,8 @@ func NewHandler(name string, section *ini.Section) (h *Handler, err error) {
 }
 
 func (h *Handler) GetTransport() (trans Transport, err error) {
-	if trans, err = h.tf.GetTransport(); err != nil {
-		return
-	}
-	if trans, err = h.tw.Wraps(trans); err != nil {
-		return
-	}
+	trans = h.tf.GetTransport()
+	trans = h.tw.GetTransport(trans)
 	return
 }
 
