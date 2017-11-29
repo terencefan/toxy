@@ -8,6 +8,7 @@ import (
 	"xmetric"
 
 	. "github.com/stdrickforce/thriftgo/protocol"
+	. "github.com/stdrickforce/thriftgo/thrift"
 	. "github.com/stdrickforce/thriftgo/transport"
 )
 
@@ -26,29 +27,31 @@ func (self *SingleProcessor) Add(
 	return
 }
 
-func (self *SingleProcessor) handle(m *Messenger) bool {
+func (self *SingleProcessor) handle(iprot, oprot Protocol) bool {
 	if shutdown > 0 {
-		fast_reply_shutdown(m)
+		fast_reply_shutdown(iprot)
 		return false
 	}
 
 	s_time := time.Now().UnixNano()
 
-	name, seqid := read_header(m)
+	name, seqid := read_message_begin(iprot)
 
 	key := fmt.Sprintf("%s.%s", self.name, name)
 	defer func() {
 		delta := int((time.Now().UnixNano() - s_time) / 1000000)
 		xmetric.Timing("toxy", key, delta)
 	}()
+	xmetric.Count("toxy", key, 1)
 
+	// NOTE fast reply ping requests.
+	// is it neccessary?
 	if name == "ping" {
-		// reply_shutdown(m, name, seqid)
-		fast_reply(m, seqid)
+		fast_reply(iprot, "ping", seqid)
 		return true
 	}
 
-	reply(m, name, seqid)
+	reply(NewStoredProtocol(iprot, name, T_CALL, seqid), oprot)
 	return true
 }
 
@@ -65,18 +68,16 @@ func (self *SingleProcessor) get_protocol() Protocol {
 }
 
 func (self *SingleProcessor) Process(conn net.Conn) {
-	itrans := NewTSocketConn(conn)
+	var itrans Transport
+	itrans = NewTSocketConn(conn)
+	itrans = NewTBufferedTransport(itrans)
 	defer itrans.Close()
 
-	protocol := self.pf.GetProtocol(itrans)
-	m := NewMessenger(protocol)
-
+	iprot := self.pf.GetProtocol(itrans)
 	oprot := self.get_protocol()
-	m.SetOutputProtocol(oprot)
-	defer m.DelOutputProtocol()
 
 	for {
-		if ok := self.handle(m); !ok {
+		if ok := self.handle(iprot, oprot); !ok {
 			break
 		}
 	}

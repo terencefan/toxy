@@ -1,37 +1,21 @@
 package toxy
 
 import (
-	"xlog"
-
 	. "github.com/stdrickforce/thriftgo/protocol"
 	. "github.com/stdrickforce/thriftgo/thrift"
 )
 
-type Messenger struct {
-	iprot Protocol
-	oprot Protocol
-}
-
-type MessengerProtocolWriter interface {
-	Write(Protocol) error
-}
+type Messenger struct{}
 
 func (m *Messenger) ForwardMessage(iprot, oprot Protocol) (err error) {
 	if err = m.ForwardMessageBegin(iprot, oprot); err != nil {
 		return
 	}
-	if err = m.Forward(iprot, oprot, T_STRUCT); err != nil {
+	if err = forward(iprot, oprot, T_STRUCT); err != nil {
 		return
 	}
 	if err = m.ForwardMessageEnd(iprot, oprot); err != nil {
 		return
-	}
-	return
-}
-
-func (m *Messenger) Forward(iprot, oprot Protocol, ftype byte) error {
-	if err := forward(iprot, oprot, ftype); err != nil {
-		return err
 	}
 	return nil
 }
@@ -60,67 +44,54 @@ func (m *Messenger) ForwardMessageEnd(iprot, oprot Protocol) error {
 	return nil
 }
 
-func (m *Messenger) skipIncomingMessage() (err error) {
-	if err = m.iprot.Skip(T_STRUCT); err != nil {
+func (m *Messenger) skipIncomingMessage(iprot Protocol) (err error) {
+	if err = iprot.Skip(T_STRUCT); err != nil {
 		return
 	}
-	if err = m.iprot.ReadMessageEnd(); err != nil {
+	if err = iprot.ReadMessageEnd(); err != nil {
 		return
 	}
 	return
 }
 
-func (m *Messenger) FastReply(seqid int32) (err error) {
-	xlog.Debug("fast reply: ping")
-	if err = m.skipIncomingMessage(); err != nil {
+func (m *Messenger) FastReply(iprot Protocol, name string, seqid int32) (err error) {
+	if err = m.skipIncomingMessage(iprot); err != nil {
 		return
 	}
-	if err = m.iprot.WriteMessageBegin("ping", T_REPLY, seqid); err != nil {
+	if err = iprot.WriteMessageBegin(name, T_REPLY, seqid); err != nil {
 		return
 	}
-	if err = m.iprot.WriteByte(T_STOP); err != nil {
+	if err = iprot.WriteByte(T_STOP); err != nil {
 		return
 	}
-	if err = m.iprot.WriteMessageEnd(); err != nil {
+	if err = iprot.WriteMessageEnd(); err != nil {
 		return
 	}
-	if err := m.iprot.Flush(); err != nil {
+	if err := iprot.Flush(); err != nil {
 		return err
 	}
 	return
 }
 
-func (m *Messenger) FastReplyShutdown() (err error) {
+func (m *Messenger) FastReplyShutdown(iprot Protocol) (err error) {
 
-	ae := NewTApplicationException("toxy is shutting down", ExceptionUnknown)
-	if err = m.iprot.WriteMessageBegin("unknown", T_EXCEPTION, 0); err != nil {
+	ae := NewTApplicationException(
+		"toxy is shutting down",
+		ExceptionUnknown,
+	)
+	if err = iprot.WriteMessageBegin("unknown", T_EXCEPTION, 0); err != nil {
 		return
 	}
-	if err = write_application_exception(ae, m.iprot); err != nil {
+	if err = write_application_exception(ae, iprot); err != nil {
 		return
 	}
-	if err = m.iprot.WriteMessageEnd(); err != nil {
+	if err = iprot.WriteMessageEnd(); err != nil {
 		return
 	}
-	if err := m.iprot.Flush(); err != nil {
+	if err := iprot.Flush(); err != nil {
 		return err
 	}
 	return
-}
-
-func (m *Messenger) SetOutputProtocol(oprot Protocol) {
-	m.oprot = oprot
-}
-
-func (m *Messenger) DelOutputProtocol() {
-	m.oprot.Close()
-	m.oprot = nil
-}
-
-func NewMessenger(protocol Protocol) *Messenger {
-	return &Messenger{
-		iprot: protocol,
-	}
 }
 
 func write_application_exception(e *TApplicationException, proto Protocol) (err error) {
@@ -154,9 +125,10 @@ func write_application_exception(e *TApplicationException, proto Protocol) (err 
 	return
 }
 
-func read_header(m *Messenger) (name string, seqid int32) {
-	xlog.Debug("read message header")
-	name, mtype, seqid, err := m.iprot.ReadMessageBegin()
+var messenger = &Messenger{}
+
+func read_message_begin(iprot Protocol) (name string, seqid int32) {
+	name, mtype, seqid, err := iprot.ReadMessageBegin()
 	if err != nil {
 		panic(err)
 	} else if mtype == T_ONEWAY {
@@ -169,26 +141,25 @@ func read_header(m *Messenger) (name string, seqid int32) {
 	return
 }
 
-func fast_reply(m *Messenger, seqid int32) bool {
-	if err := m.FastReply(seqid); err != nil {
+func fast_reply(iprot Protocol, name string, seqid int32) bool {
+	if err := messenger.FastReply(iprot, name, seqid); err != nil {
 		panic(err)
 	}
 	return true
 }
 
-func fast_reply_shutdown(m *Messenger) bool {
-	if err := m.FastReplyShutdown(); err != nil {
+func fast_reply_shutdown(iprot Protocol) bool {
+	if err := messenger.FastReplyShutdown(iprot); err != nil {
 		panic(err)
 	}
 	return false
 }
 
-func reply(m *Messenger, name string, seqid int32) bool {
-	iprot := NewStoredProtocol(m.iprot, name, T_CALL, seqid)
-	if err := m.ForwardMessage(iprot, m.oprot); err != nil {
+func reply(iprot, oprot Protocol) bool {
+	if err := messenger.ForwardMessage(iprot, oprot); err != nil {
 		panic(err)
 	}
-	if err := m.ForwardMessage(m.oprot, m.iprot); err != nil {
+	if err := messenger.ForwardMessage(oprot, iprot); err != nil {
 		panic(err)
 	}
 	return true

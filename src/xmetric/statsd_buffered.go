@@ -2,7 +2,6 @@ package xmetric
 
 import (
 	"bytes"
-	"fmt"
 	"net"
 	"time"
 )
@@ -58,7 +57,6 @@ func (self *buffered_statsd) flush() {
 		return
 	}
 
-	fmt.Println(string(self.buf.Bytes()))
 	if _, err := self.buf.WriteTo(conn); err != nil {
 		error_handler(err)
 		return
@@ -66,6 +64,7 @@ func (self *buffered_statsd) flush() {
 }
 
 func (self *buffered_statsd) append(message string) {
+	message += "\n"
 	// NOTE ignore message which are too long.
 	if len(message) > self.max_buffer_size {
 		return

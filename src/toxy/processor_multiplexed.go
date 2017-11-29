@@ -9,6 +9,7 @@ import (
 	"xmetric"
 
 	. "github.com/stdrickforce/thriftgo/protocol"
+	. "github.com/stdrickforce/thriftgo/thrift"
 	. "github.com/stdrickforce/thriftgo/transport"
 )
 
@@ -51,16 +52,15 @@ func (self *MultiplexedProcessor) get_protocol(service string) Protocol {
 	return proto
 }
 
-func (self *MultiplexedProcessor) handle(m *Messenger) bool {
+func (self *MultiplexedProcessor) handle(iprot Protocol) bool {
 	if shutdown > 0 {
-		fast_reply_shutdown(m)
+		fast_reply_shutdown(iprot)
 		return false
 	}
 
 	s_time := time.Now().UnixNano()
 
-	name, seqid := read_header(m)
-
+	name, seqid := read_message_begin(iprot)
 	service, fname := self.parse_name(name)
 	xlog.Debug("%s: %s", service, fname)
 
@@ -74,15 +74,12 @@ func (self *MultiplexedProcessor) handle(m *Messenger) bool {
 	// NOTE fast reply ping requests.
 	// is it neccessary?
 	if fname == "ping" {
-		fast_reply(m, seqid)
+		fast_reply(iprot, "ping", seqid)
 		return true
 	}
 
 	oprot := self.get_protocol(service)
-	m.SetOutputProtocol(oprot)
-	defer m.DelOutputProtocol()
-
-	reply(m, fname, seqid)
+	reply(NewStoredProtocol(iprot, fname, T_CALL, seqid), oprot)
 	return true
 }
 
@@ -93,10 +90,9 @@ func (self *MultiplexedProcessor) Process(conn net.Conn) {
 	defer itrans.Close()
 
 	protocol := self.pf.GetProtocol(itrans)
-	m := NewMessenger(protocol)
 
 	for {
-		if ok := self.handle(m); !ok {
+		if ok := self.handle(protocol); !ok {
 			break
 		}
 	}
