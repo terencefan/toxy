@@ -138,7 +138,7 @@ func (h *Handler) GetProtocol() (proto Protocol, err error) {
 	}
 	proto = NewTBinaryProtocol(trans, true, true)
 	if h.multiplexed {
-		proto = NewTMultiplexedProtocol(proto, h.name)
+		proto = NewMultiplexedProtocol(proto, h.name)
 	}
 	return
 }
