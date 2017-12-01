@@ -92,7 +92,7 @@ func (m *Messenger) FastReplyShutdown(iprot Protocol) (err error) {
 	if err = iprot.WriteMessageBegin("unknown", T_EXCEPTION, 0); err != nil {
 		return
 	}
-	if err = write_application_exception(ae, iprot); err != nil {
+	if err = WriteTApplicationException(iprot, ae); err != nil {
 		return
 	}
 	if err = iprot.WriteMessageEnd(); err != nil {
@@ -100,37 +100,6 @@ func (m *Messenger) FastReplyShutdown(iprot Protocol) (err error) {
 	}
 	if err := iprot.Flush(); err != nil {
 		return err
-	}
-	return
-}
-
-func write_application_exception(e *TApplicationException, proto Protocol) (err error) {
-	if err = proto.WriteStructBegin("TApplicationException"); err != nil {
-		return
-	}
-	if err = proto.WriteFieldBegin("message", T_STRING, 1); err != nil {
-		return
-	}
-	if err = proto.WriteString(e.Message); err != nil {
-		return
-	}
-	if err = proto.WriteFieldEnd(); err != nil {
-		return
-	}
-	if err = proto.WriteFieldBegin("type", T_I32, 2); err != nil {
-		return
-	}
-	if err = proto.WriteI32(e.Type); err != nil {
-		return
-	}
-	if err = proto.WriteFieldEnd(); err != nil {
-		return
-	}
-	if err = proto.WriteFieldStop(); err != nil {
-		return
-	}
-	if err = proto.WriteStructEnd(); err != nil {
-		return
 	}
 	return
 }
