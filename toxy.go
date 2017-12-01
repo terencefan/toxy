@@ -18,5 +18,8 @@ func main() {
 	if err := toxy.LoadConfig(*config); err != nil {
 		panic(err)
 	}
+	if *fast_reply {
+		toxy.FastReply()
+	}
 	toxy.Serve()
 }

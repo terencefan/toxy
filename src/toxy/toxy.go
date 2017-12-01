@@ -1,10 +1,12 @@
 package toxy
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -13,38 +15,180 @@ import (
 	"xmetric"
 
 	. "github.com/stdrickforce/thriftgo/protocol"
+	. "github.com/stdrickforce/thriftgo/thrift"
+	. "github.com/stdrickforce/thriftgo/transport"
 	ini "gopkg.in/ini.v1"
 )
 
 var shutdown int32 = 0
+
+const (
+	ExceptionServiceUnavailable = 100
+	ExceptionShutdown           = 101
+)
 
 type Toxy struct {
 	socket_addr string
 	http_addr   string
 	processor   Processor
 	wg          *sync.WaitGroup
+	fast_reply  bool
 }
 
-func (self *Toxy) process(conn net.Conn) {
+func send_exception(proto Protocol, ae *TApplicationException) (err error) {
+	if err = proto.WriteMessageBegin("unknown", T_EXCEPTION, 0); err != nil {
+		return
+	}
+	if err = WriteTApplicationException(proto, ae); err != nil {
+		return
+	}
+	if err = proto.WriteMessageEnd(); err != nil {
+		return
+	}
+	if err = proto.Flush(); err != nil {
+		return
+	}
+	return
+}
+
+func skip_message_body(proto Protocol) (err error) {
+	if err = proto.Skip(T_STRUCT); err != nil {
+		return
+	}
+	if err = proto.ReadMessageEnd(); err != nil {
+		return
+	}
+	return
+}
+
+func handle_err(proto Protocol, err error) (loop bool) {
+	fmt.Println(err)
+	if err == io.EOF {
+		xmetric.Count("toxy", "connection.closed", 1)
+		// NOTE reset by client or server ?
+		xlog.Debug("connection reset by peer")
+		return
+	} else if ae, ok := err.(*TApplicationException); ok {
+		switch ae.Type {
+		case ExceptionUnknownMethod:
+			fallthrough
+		case ExceptionInvalidMessageType:
+			fallthrough
+		case ExceptionWrongMethodName:
+			fallthrough
+		case ExceptionServiceUnavailable:
+			fallthrough
+		case ExceptionShutdown:
+			if err = skip_message_body(proto); err != nil {
+				return false
+			}
+			if err = send_exception(proto, ae); err != nil {
+				return false
+			}
+			loop = ae.Type != ExceptionShutdown
+		}
+	} else {
+		xmetric.Count("toxy", "error.unexpected", 1)
+		xlog.Warning("unexpected err found: %s", err)
+	}
+	return
+}
+
+func (self *Toxy) process(iprot Protocol) (err error) {
+	var (
+		s_time int64
+		key    string
+	)
+
+	s_time = time.Now().UnixNano()
+
+	// read message begin from input protocol
+	name, mtype, seqid, err := iprot.ReadMessageBegin()
+	if err != nil {
+		return
+	} else if mtype != T_CALL {
+		return NewTApplicationException(
+			fmt.Sprintf("invalid message type: %d", mtype),
+			ExceptionInvalidMessageType,
+		)
+	}
+
+	// graceful shutdown.
+	if atomic.LoadInt32(&shutdown) > 0 {
+		return NewTApplicationException(
+			"Toxy: proxy is shutting down.",
+			ExceptionShutdown,
+		)
+	}
+
+	// metrics
+	// TODO err metric ?
+	key = strings.Replace(name, ":", ".", -1)
+	xmetric.Count("toxy", key, 1)
+	defer func() {
+		delta := int((time.Now().UnixNano() - s_time) / 1000000)
+		xmetric.Timing("toxy", key, delta)
+	}()
+
+	// get output protocol and function name.
+	service, name, err := self.processor.Parse(name)
+	if err != nil {
+		return
+	}
+	fmt.Println(service, name)
+
+	// fast reply ping requests.
+	if name == "ping" && !self.fast_reply {
+		return messenger.FastReply(iprot, "ping", seqid)
+	}
+
+	// prepare protocols.
+	oprot, err := self.processor.GetProtocol(service)
+	if err != nil {
+		return NewTApplicationException(
+			"Toxy: backend server temporarily unavailable: "+err.Error(),
+			ExceptionServiceUnavailable,
+		)
+	}
+	defer oprot.Close()
+
+	// forword messages.
+	siprot := NewStoredProtocol(iprot, name, T_CALL, seqid)
+	if err = messenger.ForwardMessage(siprot, oprot); err != nil {
+		return
+	}
+	if err = messenger.ForwardMessage(oprot, iprot); err != nil {
+		return
+	}
+	return
+}
+
+func (self *Toxy) loop(conn net.Conn) {
 	self.wg.Add(1)
+	defer self.wg.Done()
+
 	remote := conn.RemoteAddr().String()
 	xlog.Info("[%s] receive connection", remote)
 	xmetric.Count("toxy", "connection.established", 1)
 
-	defer func() {
-		if err := recover(); err != nil {
-			if err != io.EOF {
-				xmetric.Count("toxy", "error.unexpected", 1)
-				xlog.Warning("[%s] unexpected err found: %s", remote, err)
+	var (
+		trans Transport
+		proto Protocol
+	)
+	trans = NewTSocketConn(conn)
+	trans = NewTBufferedTransport(trans)
+	proto = NewTBinaryProtocol(trans, true, true)
+	defer trans.Close()
+
+	for {
+		if err := self.process(proto); err != nil {
+			if ok := handle_err(proto, err); ok {
+				continue
 			} else {
-				xmetric.Count("toxy", "connection.closed", 1)
-				xlog.Debug("[%s] connection reset by peer", remote)
+				break
 			}
 		}
-		xlog.Info("[%s] connection closed", remote)
-		self.wg.Done()
-	}()
-	self.processor.Process(conn)
+	}
 }
 
 func (self *Toxy) Serve() {
@@ -77,13 +221,13 @@ func (self *Toxy) Serve() {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			xlog.Warning(err.Error())
-			if shutdown > 0 {
+			if atomic.LoadInt32(&shutdown) > 0 {
 				break
 			}
+			xlog.Warning(err.Error())
 			continue
 		}
-		go self.process(conn)
+		go self.loop(conn)
 	}
 	self.wg.Wait()
 }
@@ -138,19 +282,21 @@ func (self *Toxy) InitProcessor(section *ini.Section) (err error) {
 		ptype = section.Key("processor").String()
 	}
 
-	// TODO multiple protocol support
-	pf := NewTBinaryProtocolFactory(true, true)
 	switch ptype {
 	case "default":
 		fallthrough
-	case "single":
-		self.processor = NewProcessor(pf)
+	// case "single":
+	// 	self.processor = NewProcessor()
 	case "multiplexed":
-		self.processor = NewMultiplexedProcessor(pf)
+		self.processor = NewMultiplexedProcessor()
 	default:
 		panic("processor type must be one of: [single, multiplexed]")
 	}
 	return
+}
+
+func (self *Toxy) FastReply() {
+	self.fast_reply = true
 }
 
 func (self *Toxy) LoadConfig(filepath string) (err error) {

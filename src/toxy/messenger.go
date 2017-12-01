@@ -7,6 +7,16 @@ import (
 
 type Messenger struct{}
 
+func (m *Messenger) Reply(iprot, oprot Protocol) (err error) {
+	if err = messenger.ForwardMessage(iprot, oprot); err != nil {
+		return
+	}
+	if err = messenger.ForwardMessage(oprot, iprot); err != nil {
+		return
+	}
+	return
+}
+
 func (m *Messenger) ForwardMessage(iprot, oprot Protocol) (err error) {
 	if err = m.ForwardMessageBegin(iprot, oprot); err != nil {
 		return
@@ -126,41 +136,3 @@ func write_application_exception(e *TApplicationException, proto Protocol) (err 
 }
 
 var messenger = &Messenger{}
-
-func read_message_begin(iprot Protocol) (name string, seqid int32) {
-	name, mtype, seqid, err := iprot.ReadMessageBegin()
-	if err != nil {
-		panic(err)
-	} else if mtype == T_ONEWAY {
-		// TODO reply exception "doesn't support oneway request yet."
-	} else if mtype != T_CALL {
-		// TODO raise exception.
-	} else {
-		return
-	}
-	return
-}
-
-func fast_reply(iprot Protocol, name string, seqid int32) bool {
-	if err := messenger.FastReply(iprot, name, seqid); err != nil {
-		panic(err)
-	}
-	return true
-}
-
-func fast_reply_shutdown(iprot Protocol) bool {
-	if err := messenger.FastReplyShutdown(iprot); err != nil {
-		panic(err)
-	}
-	return false
-}
-
-func reply(iprot, oprot Protocol) bool {
-	if err := messenger.ForwardMessage(iprot, oprot); err != nil {
-		panic(err)
-	}
-	if err := messenger.ForwardMessage(oprot, iprot); err != nil {
-		panic(err)
-	}
-	return true
-}

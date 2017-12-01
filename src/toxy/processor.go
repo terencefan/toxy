@@ -1,25 +1,9 @@
 package toxy
 
-import (
-	"fmt"
-	"net"
-)
+import "github.com/stdrickforce/thriftgo/protocol"
 
 type Processor interface {
 	Add(string, *Handler) error
-	Process(net.Conn)
-}
-
-type ProcessorError struct {
-	Message string
-}
-
-func (e ProcessorError) Error() string {
-	return e.Message
-}
-
-func NewProcessorError(format string, args ...interface{}) ProcessorError {
-	return ProcessorError{
-		Message: fmt.Sprintf(format, args...),
-	}
+	Parse(name string) (fname, service string, err error)
+	GetProtocol(service string) (protocol.Protocol, error)
 }

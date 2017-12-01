@@ -2,6 +2,7 @@ package toxy
 
 import (
 	"errors"
+	"time"
 
 	. "github.com/stdrickforce/thriftgo/protocol"
 	. "github.com/stdrickforce/thriftgo/transport"
@@ -16,6 +17,7 @@ type Handler struct {
 	tf          TransportFactory
 	tw          TransportWrapper
 	multiplexed bool
+	timeout     time.Duration
 }
 
 var p = &xparser.Parser{}
@@ -58,6 +60,7 @@ func NewHandler(name string, section *ini.Section) (h *Handler, err error) {
 		name:        name,
 		tw:          TTransportWrapper,
 		multiplexed: false,
+		timeout:     time.Second * 30,
 	}
 
 	// transport
@@ -119,6 +122,15 @@ func NewHandler(name string, section *ini.Section) (h *Handler, err error) {
 	if section.HasKey("multiplexed") {
 		h.multiplexed = true
 	}
+
+	// timeout
+	if section.HasKey("timeout") {
+		timeout, err := section.Key("timeout").Int()
+		if err != nil {
+			return nil, err
+		}
+		h.timeout = time.Millisecond * time.Duration(timeout)
+	}
 	return
 }
 
@@ -133,6 +145,7 @@ func (h *Handler) GetProtocol() (proto Protocol, err error) {
 	if trans, err = h.GetTransport(); err != nil {
 		return
 	}
+	trans.SetTimeout(h.timeout)
 	if err = trans.Open(); err != nil {
 		return
 	}
