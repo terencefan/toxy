@@ -23,10 +23,8 @@ type Handler struct {
 var p = &xparser.Parser{}
 
 func new_http_tf(section *ini.Section) (tf TransportFactory, err error) {
-	// TODO check if addr / path exist in config
 	addr := section.Key("addr").String()
-	path := section.Key("path").String()
-	tf = NewTHttpTransportFactory(addr, path)
+	tf = NewTHttpTransportFactory(addr)
 	return
 }
 
