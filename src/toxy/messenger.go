@@ -48,7 +48,7 @@ func (m *Messenger) ForwardMessageEnd(iprot, oprot Protocol) error {
 	if err := oprot.WriteMessageEnd(); err != nil {
 		return err
 	}
-	if err := oprot.Flush(); err != nil {
+	if err := oprot.GetTransport().Flush(); err != nil {
 		return err
 	}
 	return nil
@@ -77,7 +77,7 @@ func (m *Messenger) FastReply(iprot Protocol, name string, seqid int32) (err err
 	if err = iprot.WriteMessageEnd(); err != nil {
 		return
 	}
-	if err := iprot.Flush(); err != nil {
+	if err := iprot.GetTransport().Flush(); err != nil {
 		return err
 	}
 	return
@@ -98,7 +98,7 @@ func (m *Messenger) FastReplyShutdown(iprot Protocol) (err error) {
 	if err = iprot.WriteMessageEnd(); err != nil {
 		return
 	}
-	if err := iprot.Flush(); err != nil {
+	if err := iprot.GetTransport().Flush(); err != nil {
 		return err
 	}
 	return

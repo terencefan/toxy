@@ -45,7 +45,7 @@ func send_exception(proto Protocol, ae *TApplicationException) (err error) {
 	if err = proto.WriteMessageEnd(); err != nil {
 		return
 	}
-	if err = proto.Flush(); err != nil {
+	if err = proto.GetTransport().Flush(); err != nil {
 		return
 	}
 	return
@@ -150,7 +150,7 @@ func (self *Toxy) process(iprot Protocol) (err error) {
 			ExceptionServiceUnavailable,
 		)
 	}
-	defer oprot.Close()
+	defer oprot.GetTransport().Close()
 
 	// forword messages.
 	siprot := NewStoredProtocol(iprot, name, T_CALL, seqid)
