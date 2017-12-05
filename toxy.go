@@ -1,6 +1,7 @@
 package main
 
 import (
+	"runtime"
 	"toxy"
 
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -13,6 +14,8 @@ var (
 
 func main() {
 	kingpin.Parse()
+
+	runtime.GOROOT()
 
 	var toxy = toxy.NewToxy()
 	if err := toxy.LoadConfig(*config); err != nil {

@@ -1,6 +1,7 @@
 package toxy
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"xlog"
 	"xmetric"
 
+	raven "github.com/getsentry/raven-go"
 	. "github.com/stdrickforce/thriftgo/protocol"
 	. "github.com/stdrickforce/thriftgo/thrift"
 	. "github.com/stdrickforce/thriftgo/transport"
@@ -33,6 +35,7 @@ type Toxy struct {
 	processor   Processor
 	wg          *sync.WaitGroup
 	fast_reply  bool
+	ctx         context.Context
 }
 
 func send_exception(proto Protocol, ae *TApplicationException) (err error) {
@@ -61,12 +64,9 @@ func skip_message_body(proto Protocol) (err error) {
 	return
 }
 
-func handle_err(proto Protocol, err error) (loop bool) {
-	fmt.Println(err)
+func handle_err(ctx context.Context, proto Protocol, err error) (loop bool) {
 	if err == io.EOF {
-		xmetric.Count("toxy", "connection.closed", 1)
 		// NOTE reset by client or server ?
-		xlog.Debug("connection reset by peer")
 		return
 	} else if ae, ok := err.(*TApplicationException); ok {
 		switch ae.Type {
@@ -80,21 +80,27 @@ func handle_err(proto Protocol, err error) (loop bool) {
 			fallthrough
 		case ExceptionShutdown:
 			if err = skip_message_body(proto); err != nil {
+				xlog.Error(ctx, err.Error())
 				return false
 			}
 			if err = send_exception(proto, ae); err != nil {
+				xlog.Error(ctx, err.Error())
 				return false
 			}
+			xlog.Warning(ctx, ae.Error())
 			loop = ae.Type != ExceptionShutdown
 		}
 	} else {
 		xmetric.Count("toxy", "error.unexpected", 1)
-		xlog.Warning("unexpected err found: %s", err)
+		xlog.Error(ctx, err.Error())
+		raven.CaptureError(err, nil)
 	}
 	return
 }
 
-func (self *Toxy) process(iprot Protocol) (err error) {
+func (self *Toxy) process(ctx *context.Context, iprot Protocol) (err error) {
+	*ctx = context.WithValue(*ctx, "name", "N")
+
 	var (
 		s_time int64
 		key    string
@@ -112,6 +118,8 @@ func (self *Toxy) process(iprot Protocol) (err error) {
 			ExceptionInvalidMessageType,
 		)
 	}
+	*ctx = context.WithValue(*ctx, "name", name)
+	xlog.Info(*ctx, "receive request")
 
 	// graceful shutdown.
 	if atomic.LoadInt32(&shutdown) > 0 {
@@ -135,10 +143,10 @@ func (self *Toxy) process(iprot Protocol) (err error) {
 	if err != nil {
 		return
 	}
-	fmt.Println(service, name)
 
 	// fast reply ping requests.
-	if name == "ping" && !self.fast_reply {
+	if name == "ping" && self.fast_reply {
+		defer xlog.Info(*ctx, "fast reply ping request")
 		return messenger.FastReply(iprot, "ping", seqid)
 	}
 
@@ -160,15 +168,24 @@ func (self *Toxy) process(iprot Protocol) (err error) {
 	if err = messenger.ForwardMessage(oprot, iprot); err != nil {
 		return
 	}
+	xlog.Info(*ctx, "send response")
 	return
 }
 
 func (self *Toxy) loop(conn net.Conn) {
 	self.wg.Add(1)
+
+	defer conn.Close()
 	defer self.wg.Done()
 
-	remote := conn.RemoteAddr().String()
-	xlog.Info("[%s] receive connection", remote)
+	var ctx = context.Background()
+	ctx = context.WithValue(ctx, "raddr", conn.RemoteAddr().String())
+	ctx = context.WithValue(ctx, "laddr", conn.LocalAddr().String())
+
+	defer xmetric.Count("toxy", "connection.closed", 1)
+	defer xlog.Debug(ctx, "connection closed")
+
+	xlog.Info(ctx, "receive connection")
 	xmetric.Count("toxy", "connection.established", 1)
 
 	var (
@@ -181,8 +198,8 @@ func (self *Toxy) loop(conn net.Conn) {
 	defer trans.Close()
 
 	for {
-		if err := self.process(proto); err != nil {
-			if ok := handle_err(proto, err); ok {
+		if err := self.process(&ctx, proto); err != nil {
+			if ok := handle_err(ctx, proto, err); ok {
 				continue
 			} else {
 				break
@@ -204,14 +221,15 @@ func (self *Toxy) Serve() {
 		panic(err)
 	}
 
-	xlog.Info("toxy is listening on %s", self.socket_addr)
+	self.ctx = context.WithValue(self.ctx, "laddr", self.socket_addr)
+	xlog.Info(self.ctx, "toxy is listening")
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
 		<-sigs
-		xlog.Warning("Received INT/TERM signal, stopping...")
+		xlog.Warning(self.ctx, "Received INT/TERM signal, stopping...")
 		atomic.StoreInt32(&shutdown, 1)
 		if ln != nil {
 			ln.Close()
@@ -223,9 +241,10 @@ func (self *Toxy) Serve() {
 		if err != nil {
 			if atomic.LoadInt32(&shutdown) > 0 {
 				break
+			} else {
+				xlog.Warning(self.ctx, err.Error())
+				continue
 			}
-			xlog.Warning(err.Error())
-			continue
 		}
 		go self.loop(conn)
 	}
@@ -309,11 +328,18 @@ func (self *Toxy) LoadConfig(filepath string) (err error) {
 	}
 
 	// initialize metric client
-	if section, err = f.GetSection("metric"); err != nil {
-		return
+	if section, err = f.GetSection("metric"); err == nil {
+		if err = self.InitMetric(section); err == nil {
+			xlog.Info(self.ctx, "metric has been initialized successfully")
+		}
 	}
-	if err = self.InitMetric(section); err != nil {
-		return
+
+	// initialize raven client
+	if section, err = f.GetSection("sentry"); err == nil {
+		if dsn, err := section.GetKey("dsn"); err == nil {
+			raven.SetDSN(dsn.String())
+			xlog.Info(self.ctx, "sentry has been initialized successfully")
+		}
 	}
 
 	// initialize socketserver & processor
@@ -337,6 +363,7 @@ func (self *Toxy) LoadConfig(filepath string) (err error) {
 
 func NewToxy() *Toxy {
 	return &Toxy{
-		wg: new(sync.WaitGroup),
+		wg:  new(sync.WaitGroup),
+		ctx: context.Background(),
 	}
 }

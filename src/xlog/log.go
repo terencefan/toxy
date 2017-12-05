@@ -1,6 +1,7 @@
 package xlog
 
 import (
+	"context"
 	"fmt"
 	"time"
 )
@@ -12,75 +13,105 @@ const (
 	ERROR
 )
 
-var DefaultLog Logger
-
-type Logger interface {
-	Debug(p string, args ...interface{})
-	Info(p string, args ...interface{})
-	Warning(p string, args ...interface{})
-	Error(p string, args ...interface{})
+var level2str = map[int16]string{
+	DEBUG:   "DEBUG",
+	INFO:    "INFO",
+	WARNING: "WARNING",
+	ERROR:   "ERROR",
 }
 
-type ConsoleLog struct {
-	level int
+var DefaultLog LeveledLogger
+
+// time, level, laddr, raddr, message
+var defaultFormat = "%s %-8s %s - %s <%s> %s\n"
+
+type LeveledLogger interface {
+	Debug(ctx context.Context, p string)
+	Info(ctx context.Context, p string)
+	Warning(ctx context.Context, p string)
+	Error(ctx context.Context, p string)
 }
 
-func (self *ConsoleLog) Log(level, p string, args ...interface{}) {
-	prefix := fmt.Sprintf("[%s][%s]", time.Now().Format("01-02 15:04:05.000"), level)
-	fmt.Printf(prefix+" "+p+"\n", args...)
+type Logger struct {
+	level  int16
+	format string
 }
 
-func (self *ConsoleLog) Debug(p string, args ...interface{}) {
-	if self.level > DEBUG {
+func get_default(
+	ctx context.Context, key string, defaultVal interface{},
+) (val interface{}) {
+	if val = ctx.Value(key); val == nil {
+		val = defaultVal
+	}
+	return val
+}
+
+func (self *Logger) Log(
+	ctx context.Context,
+	level int16,
+	p string,
+	args ...interface{},
+) {
+	if self.level > level {
 		return
 	}
-	self.Log("DEBUG", p, args...)
+
+	var (
+		name  = get_default(ctx, "name", "N")
+		laddr = get_default(ctx, "laddr", "N")
+		raddr = get_default(ctx, "raddr", "N")
+	)
+
+	fmt.Printf(
+		self.format,
+		time.Now().Format("01-02 15:04:05.000"),
+		level2str[level],
+		laddr,
+		raddr,
+		name,
+		fmt.Sprintf(p, args...),
+	)
 }
 
-func (self *ConsoleLog) Info(p string, args ...interface{}) {
-	if self.level > INFO {
-		return
-	}
-	self.Log("INFO", p, args...)
+func (self *Logger) Debug(ctx context.Context, p string) {
+	self.Log(ctx, DEBUG, p)
 }
 
-func (self *ConsoleLog) Warning(p string, args ...interface{}) {
-	if self.level > WARNING {
-		return
-	}
-	self.Log("WARNING", p, args...)
+func (self *Logger) Info(ctx context.Context, p string) {
+	self.Log(ctx, INFO, p)
 }
 
-func (self *ConsoleLog) Error(p string, args ...interface{}) {
-	if self.level > ERROR {
-		return
-	}
-	self.Log("ERROR", p, args...)
+func (self *Logger) Warning(ctx context.Context, p string) {
+	self.Log(ctx, WARNING, p)
 }
 
-func MakeConsoleLog(level int) (log *ConsoleLog) {
-	log = &ConsoleLog{}
+func (self *Logger) Error(ctx context.Context, p string) {
+	self.Log(ctx, ERROR, p)
+}
+
+func MakeLogger(level int16) (log *Logger) {
+	log = &Logger{}
 	log.level = level
+	log.format = defaultFormat
 	return
 }
 
 func init() {
-	DefaultLog = MakeConsoleLog(DEBUG)
-	DefaultLog.Info("xlog has been initialized.")
+	DefaultLog = MakeLogger(DEBUG)
 }
 
-func Debug(p string, args ...interface{}) {
-	DefaultLog.Debug(p, args...)
+func Debug(ctx context.Context, p string) {
+	DefaultLog.Debug(ctx, p)
 }
 
-func Info(p string, args ...interface{}) {
-	DefaultLog.Info(p, args...)
+func Info(ctx context.Context, p string) {
+	DefaultLog.Info(ctx, p)
 }
 
-func Warning(p string, args ...interface{}) {
-	DefaultLog.Warning(p, args...)
+func Warning(ctx context.Context, p string) {
+	DefaultLog.Warning(ctx, p)
 }
 
-func Error(p string, args ...interface{}) {
-	DefaultLog.Error(p, args...)
+func Error(ctx context.Context, p string) {
+	DefaultLog.Error(ctx, p)
 }
