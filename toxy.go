@@ -13,6 +13,7 @@ var (
 )
 
 func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	kingpin.Parse()
 
 	runtime.GOROOT()

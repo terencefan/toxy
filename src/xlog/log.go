@@ -1,7 +1,6 @@
 package xlog
 
 import (
-	"context"
 	"fmt"
 	"time"
 )
@@ -23,13 +22,13 @@ var level2str = map[int16]string{
 var DefaultLog LeveledLogger
 
 // time, level, laddr, raddr, message
-var defaultFormat = "%s %-8s %s - %s <%s> %s\n"
+var defaultFormat = "%s [%s] %s\n"
 
 type LeveledLogger interface {
-	Debug(ctx context.Context, p string)
-	Info(ctx context.Context, p string)
-	Warning(ctx context.Context, p string)
-	Error(ctx context.Context, p string)
+	Debug(p string)
+	Info(p string)
+	Warning(p string)
+	Error(p string)
 }
 
 type Logger struct {
@@ -37,17 +36,7 @@ type Logger struct {
 	format string
 }
 
-func get_default(
-	ctx context.Context, key string, defaultVal interface{},
-) (val interface{}) {
-	if val = ctx.Value(key); val == nil {
-		val = defaultVal
-	}
-	return val
-}
-
 func (self *Logger) Log(
-	ctx context.Context,
 	level int16,
 	p string,
 	args ...interface{},
@@ -56,37 +45,28 @@ func (self *Logger) Log(
 		return
 	}
 
-	var (
-		name  = get_default(ctx, "name", "N")
-		laddr = get_default(ctx, "laddr", "N")
-		raddr = get_default(ctx, "raddr", "N")
-	)
-
 	fmt.Printf(
 		self.format,
-		time.Now().Format("01-02 15:04:05.000"),
+		time.Now().Format("2006-01-02 15:04:05.000"),
 		level2str[level],
-		laddr,
-		raddr,
-		name,
 		fmt.Sprintf(p, args...),
 	)
 }
 
-func (self *Logger) Debug(ctx context.Context, p string) {
-	self.Log(ctx, DEBUG, p)
+func (self *Logger) Debug(p string) {
+	self.Log(DEBUG, p)
 }
 
-func (self *Logger) Info(ctx context.Context, p string) {
-	self.Log(ctx, INFO, p)
+func (self *Logger) Info(p string) {
+	self.Log(INFO, p)
 }
 
-func (self *Logger) Warning(ctx context.Context, p string) {
-	self.Log(ctx, WARNING, p)
+func (self *Logger) Warning(p string) {
+	self.Log(WARNING, p)
 }
 
-func (self *Logger) Error(ctx context.Context, p string) {
-	self.Log(ctx, ERROR, p)
+func (self *Logger) Error(p string) {
+	self.Log(ERROR, p)
 }
 
 func MakeLogger(level int16) (log *Logger) {
@@ -100,18 +80,18 @@ func init() {
 	DefaultLog = MakeLogger(DEBUG)
 }
 
-func Debug(ctx context.Context, p string) {
-	DefaultLog.Debug(ctx, p)
+func Debug(p string) {
+	DefaultLog.Debug(p)
 }
 
-func Info(ctx context.Context, p string) {
-	DefaultLog.Info(ctx, p)
+func Info(p string) {
+	DefaultLog.Info(p)
 }
 
-func Warning(ctx context.Context, p string) {
-	DefaultLog.Warning(ctx, p)
+func Warning(p string) {
+	DefaultLog.Warning(p)
 }
 
-func Error(ctx context.Context, p string) {
-	DefaultLog.Error(ctx, p)
+func Error(p string) {
+	DefaultLog.Error(p)
 }
