@@ -18,7 +18,6 @@ import (
 	. "github.com/stdrickforce/thriftgo/protocol"
 	. "github.com/stdrickforce/thriftgo/thrift"
 	. "github.com/stdrickforce/thriftgo/transport"
-	ini "gopkg.in/ini.v1"
 )
 
 var shutdown int32 = 0
@@ -79,19 +78,20 @@ func handle_err(proto Protocol, err error) (loop bool) {
 		case ExceptionShutdown:
 			if err = skip_message_body(proto); err != nil {
 				xlog.Error(err.Error())
-				return false
+				return
 			}
 			if err = send_exception(proto, ae); err != nil {
 				xlog.Error(err.Error())
-				return false
+				return
 			}
-			xlog.Warning(ae.Error())
 			loop = ae.Type != ExceptionShutdown
 		}
+		xlog.Warning(ae.Error())
+		raven.CaptureError(ae, nil)
 	} else {
 		xmetric.Count("toxy", "error.unexpected", 1)
-		xlog.Error(err.Error())
 		raven.CaptureError(err, nil)
+		xlog.Error(err.Error())
 	}
 	return
 }
@@ -213,7 +213,7 @@ func (self *Toxy) Serve() {
 		panic(err)
 	}
 
-	xlog.Info("toxy is listening")
+	xlog.Info("toxy is listening on " + self.socket_addr)
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -242,20 +242,10 @@ func (self *Toxy) Serve() {
 	self.wg.Wait()
 }
 
-func (self *Toxy) InitMetric(section *ini.Section) (err error) {
-	var addr = "0.0.0.0:8125"
-	if section.HasKey("addr") {
-		addr = section.Key("addr").String()
-	}
-
-	var prefix = ""
-	if section.HasKey("prefix") {
-		prefix = section.Key("prefix").String()
-	}
-
+func (self *Toxy) InitMetric(conf *MetricConfig) (err error) {
 	xmetric.InitBufferedStatsd(
-		xmetric.Address(addr),
-		xmetric.Prefix(prefix),
+		xmetric.Address(conf.Addr),
+		xmetric.Prefix(conf.Prefix),
 		xmetric.FlushPeriod(time.Second),
 		xmetric.MaxBufferSize(1450),
 		xmetric.MaxQueueSize(128),
@@ -263,40 +253,28 @@ func (self *Toxy) InitMetric(section *ini.Section) (err error) {
 	return
 }
 
-func (self *Toxy) InitServices(sections []*ini.Section) (err error) {
-	for _, section := range sections {
-		name := section.Name()[8:]
+func (self *Toxy) InitSentry(conf *SentryConfig) (err error) {
+	var context = make(map[string]string)
 
-		handler, err := NewHandler(name, section)
-		if err != nil {
-			return err
-		}
-
-		err = self.processor.Add(name, handler)
-		if err != nil {
-			return err
-		}
+	// hostname
+	if hostname, err := os.Hostname(); err != nil {
+		return err
+	} else {
+		context["hostname"] = hostname
 	}
-	return
+
+	// appname
+	context["app"] = "bank"
+	return raven.SetDSN(conf.Dsn)
 }
 
-func (self *Toxy) InitProcessor(section *ini.Section) (err error) {
-	if section.HasKey("addr") {
-		self.socket_addr = section.Key("addr").String()
-	} else {
-		self.socket_addr = "0.0.0.0:6000"
-	}
-
-	ptype := "default"
-	if section.HasKey("processor") {
-		ptype = section.Key("processor").String()
-	}
-
-	switch ptype {
+func (self *Toxy) InitProcessor(conf *ProxyConfig) (err error) {
+	self.socket_addr = conf.Addr
+	switch conf.Processor {
 	case "default":
 		fallthrough
-	// case "single":
-	// 	self.processor = NewProcessor()
+	case "single":
+		self.processor = NewProcessor()
 	case "multiplexed":
 		self.processor = NewMultiplexedProcessor()
 	default:
@@ -305,55 +283,61 @@ func (self *Toxy) InitProcessor(section *ini.Section) (err error) {
 	return
 }
 
-func (self *Toxy) FastReply() {
-	self.fast_reply = true
-}
-
-func (self *Toxy) LoadConfig(filepath string) (err error) {
-	var f *ini.File
-	var section *ini.Section
-
-	// load config file
-	if f, err = ini.Load(filepath); err != nil {
+func (self *Toxy) AddService(conf *ServiceConfig) (err error) {
+	handler, err := NewHandler(conf.Name, conf)
+	if err != nil {
 		return err
 	}
-
-	// initialize metric client
-	if section, err = f.GetSection("metric"); err == nil {
-		if err = self.InitMetric(section); err == nil {
-			xlog.Info("metric has been initialized successfully")
-		}
-	}
-
-	// initialize raven client
-	if section, err = f.GetSection("sentry"); err == nil {
-		if dsn, err := section.GetKey("dsn"); err == nil {
-			raven.SetDSN(dsn.String())
-			xlog.Info("sentry has been initialized successfully")
-		}
-	}
-
-	// initialize socketserver & processor
-	if section, err = f.GetSection("socketserver"); err != nil {
-		return
-	}
-	if err = self.InitProcessor(section); err != nil {
-		return
-	}
-
-	// TODO init httpserver.
-
-	// TODO init downgrade.
-
-	// initialize backend services.
-	if err = self.InitServices(f.ChildSections("service")); err != nil {
-		return
+	err = self.processor.Add(conf.Name, handler)
+	if err != nil {
+		return err
 	}
 	return
 }
 
-func NewToxy() *Toxy {
-	return &Toxy{
+func (self *Toxy) FastReply() {
+	self.fast_reply = true
+}
+
+func (self *Toxy) Init(conf *Config) (err error) {
+	// initialize processor
+	if err = self.InitProcessor(conf.Proxy); err != nil {
+		return
+	}
+	xlog.Info(fmt.Sprintf("proxy is running in %s mode", conf.Proxy.Processor))
+
+	// initialize metric
+	if conf.Metric != nil {
+		if err = self.InitMetric(conf.Metric); err != nil {
+			return
+		}
+		xlog.Info("metric module has been initialized")
+	}
+
+	// initialize sentry
+	if conf.Sentry != nil {
+		if err = self.InitSentry(conf.Sentry); err != nil {
+			return
+		}
+		xlog.Info("sentry module has been initialized")
+	}
+
+	// initialize services
+	for _, sc := range conf.Services {
+		if err = self.AddService(sc); err != nil {
+			return
+		}
+		xlog.Info(fmt.Sprintf("service %s has been registered", sc.Name))
+	}
+	return
+}
+
+func NewToxy(conf *Config) (toxy *Toxy) {
+	toxy = &Toxy{
 		wg: new(sync.WaitGroup),
 	}
+	if err := toxy.Init(conf); err != nil {
+		panic(err)
+	}
+	return
 }

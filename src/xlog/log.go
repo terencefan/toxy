@@ -19,6 +19,13 @@ var level2str = map[int16]string{
 	ERROR:   "ERROR",
 }
 
+var str2level = map[string]int16{
+	"DEBUG":   DEBUG,
+	"INFO":    INFO,
+	"WARNING": WARNING,
+	"ERROR":   ERROR,
+}
+
 var DefaultLog LeveledLogger
 
 // time, level, laddr, raddr, message
@@ -29,6 +36,7 @@ type LeveledLogger interface {
 	Info(p string)
 	Warning(p string)
 	Error(p string)
+	Level(level int16)
 }
 
 type Logger struct {
@@ -51,6 +59,10 @@ func (self *Logger) Log(
 		level2str[level],
 		fmt.Sprintf(p, args...),
 	)
+}
+
+func (self *Logger) Level(level int16) {
+	self.level = level
 }
 
 func (self *Logger) Debug(p string) {
@@ -77,7 +89,19 @@ func MakeLogger(level int16) (log *Logger) {
 }
 
 func init() {
-	DefaultLog = MakeLogger(DEBUG)
+	DefaultLog = MakeLogger(INFO)
+}
+
+func Level(level int16) {
+	DefaultLog.Level(level)
+}
+
+func LevelString(level string) {
+	if l, ok := str2level[level]; !ok {
+		Warning("invalid log level: " + level)
+	} else {
+		Level(l)
+	}
 }
 
 func Debug(p string) {

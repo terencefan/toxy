@@ -8,8 +8,6 @@ import (
 	. "github.com/stdrickforce/thriftgo/transport"
 
 	xparser "github.com/stdrickforce/go-thrift/parser"
-	xthrift "github.com/stdrickforce/thriftgo/thrift"
-	ini "gopkg.in/ini.v1"
 )
 
 type Handler struct {
@@ -22,38 +20,35 @@ type Handler struct {
 
 var p = &xparser.Parser{}
 
-func new_http_tf(section *ini.Section) (tf TransportFactory, err error) {
-	addr := section.Key("addr").String()
-	tf = NewTHttpTransportFactory(addr)
+func new_http_tf(conf *ServiceConfig) (tf TransportFactory, err error) {
+	tf = NewTHttpTransportFactory(conf.Addr)
 	return
 }
 
-func new_socket_tf(section *ini.Section) (tf TransportFactory, err error) {
-	addr := section.Key("addr").String()
-	tf = NewTSocketFactory(addr)
+func new_socket_tf(conf *ServiceConfig) (tf TransportFactory, err error) {
+	tf = NewTSocketFactory(conf.Addr)
 	return
 }
 
-func new_unix_socket_tf(section *ini.Section) (tf TransportFactory, err error) {
-	addr := section.Key("addr").String()
-	tf = NewTUnixSocketFactory(addr)
+func new_unix_socket_tf(conf *ServiceConfig) (tf TransportFactory, err error) {
+	tf = NewTUnixSocketFactory(conf.Addr)
 	return
 }
 
-func new_buffered_tw(section *ini.Section) (tw TransportWrapper, err error) {
+func new_buffered_tw(conf *ServiceConfig) (tw TransportWrapper, err error) {
 	rbufsize := 4096
 	wbufsize := 4096
 	tw = NewTBufferedTransportFactory(rbufsize, wbufsize)
 	return
 }
 
-func new_framed_tw(section *ini.Section) (tw TransportWrapper, err error) {
+func new_framed_tw(conf *ServiceConfig) (tw TransportWrapper, err error) {
 	rframed, wframed := false, true
 	tw = NewTFramedTransportFactory(rframed, wframed)
 	return
 }
 
-func NewHandler(name string, section *ini.Section) (h *Handler, err error) {
+func NewHandler(name string, conf *ServiceConfig) (h *Handler, err error) {
 	h = &Handler{
 		name:        name,
 		tw:          TTransportWrapper,
@@ -62,24 +57,18 @@ func NewHandler(name string, section *ini.Section) (h *Handler, err error) {
 	}
 
 	// transport
-	if section.HasKey("transport") {
-		transport := section.Key("transport").String()
-		switch transport {
-		case "http":
-			h.tf, err = new_http_tf(section)
-		case "socket":
-			h.tf, err = new_socket_tf(section)
-		case "unix_socket":
-			h.tf, err = new_unix_socket_tf(section)
-		case "tls_socket":
-			return nil, errors.New("Not implement error")
-		default:
-			// TODO more error messages.
-			err = errors.New("invalid transport: " + transport)
-			return nil, err
-		}
-	} else {
-		err = errors.New("transport has not been defined")
+	switch conf.Transport {
+	case "http":
+		h.tf, err = new_http_tf(conf)
+	case "socket":
+		h.tf, err = new_socket_tf(conf)
+	case "unix_socket":
+		h.tf, err = new_unix_socket_tf(conf)
+	case "tls_socket":
+		err = errors.New("Not implement error")
+	default:
+		// TODO more error messages.
+		err = errors.New("invalid transport: " + conf.Transport)
 	}
 
 	if err != nil {
@@ -87,48 +76,23 @@ func NewHandler(name string, section *ini.Section) (h *Handler, err error) {
 	}
 
 	// wrapper
-	if section.HasKey("wrapper") {
-		wrapper := section.Key("wrapper").String()
-		switch wrapper {
-		case "buffered":
-			h.tw, err = new_buffered_tw(section)
-		case "framed":
-			h.tw, err = new_framed_tw(section)
-		default:
-			err = errors.New("invalid transport wrapper: " + wrapper)
-		}
-	} else {
+	switch conf.Wrapper {
+	case "":
 		h.tw = TTransportWrapper
+	case "buffered":
+		h.tw, err = new_buffered_tw(conf)
+	case "framed":
+		h.tw, err = new_framed_tw(conf)
+	default:
+		err = errors.New("invalid transport wrapper: " + conf.Wrapper)
 	}
 
 	if err != nil {
 		return nil, err
 	}
 
-	// thrift
-	if key, err := section.GetKey("thrift"); err != nil {
-		// skip
-	} else {
-		filename := key.String()
-		_, _, err := xthrift.Parse(filename)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// multiplexed
-	if section.HasKey("multiplexed") {
-		h.multiplexed = true
-	}
-
-	// timeout
-	if section.HasKey("timeout") {
-		timeout, err := section.Key("timeout").Int()
-		if err != nil {
-			return nil, err
-		}
-		h.timeout = time.Millisecond * time.Duration(timeout)
-	}
+	h.multiplexed = conf.Multiplexed
+	h.timeout = time.Millisecond * time.Duration(conf.Timeout)
 	return
 }
 
